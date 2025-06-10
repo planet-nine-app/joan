@@ -34,8 +34,8 @@ flowchart TD
 It doesn't get much CRUDier than this API:
 
 <details>
- <summary><code>POST</code> <code><b>/user/create</b></code> <code>Creates a new user if pubKey does not exist, and returns existing uuid if it does and hash is correct.
-signature message is: timestamp + pubKey + hash</code></summary>
+ <summary><code>PUT</code> <code><b>/user/create</b></code> <code>Creates a new user if pubKey does not exist, and returns existing uuid if it does and hash is correct.
+signature message is: timestamp + hash + pubKey</code></summary>
 
 ##### Parameters
 
@@ -63,7 +63,7 @@ signature message is: timestamp + pubKey + hash</code></summary>
 </details>
 
 <details>
- <summary><code>GET</code> <code><b>/user/:hash?timestamp=<timestamp>&pubKey=<pubkey>&signature=<signature of (timestamp + pubKey + hash)></b></code> <code>Returns whether user credentials match what was saved</code></summary>
+ <summary><code>GET</code> <code><b>/user/:hash/pubKey/:pubKey?timestamp=<timestamp>&signature=<signature of (timestamp + hash + pubKey)></b></code> <code>Returns whether user credentials match what was saved</code></summary>
 
 ##### Parameters
 
@@ -90,7 +90,7 @@ signature message is: timestamp + pubKey + hash</code></summary>
 </details>
 
 <details>
-  <summary><code>PUT</code> <code><b>/user/:uuid/save-hash</b></code> <code>Returns whether last saved hash matches sent hash.
+  <summary><code>PUT</code> <code><b>/user/:uuid/update-hash</b></code> <code>Updates an existing hash to a new hash.
 signature message is:  timestamp + pubkey + hash + newHash</code></summary>
 
 ##### Parameters

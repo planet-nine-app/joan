@@ -67,7 +67,7 @@ it('should get uuid, and save new pubKey', async () => {
   let newKeys;
   newKeys = await sessionless.generateKeys($ => newKeys = $, () => newKeys);
 
-  const signature = await sessionless.sign(timestamp + hash);
+  const signature = await sessionless.sign(timestamp + hash + newKeys.pubKey);
 
   const res = await get(`${baseURL}user/${hash}/pubKey/${newKeys.pubKey}?timestamp=${timestamp}&signature=${signature}`);
   res.status.should.equal(200);

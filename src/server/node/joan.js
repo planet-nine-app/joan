@@ -70,6 +70,7 @@ console.log(body);
     const pubKey = body.pubKey;
     const hash = body.hash;
     const message = body.timestamp + hash + pubKey;
+console.log('joan verifying', message);
 
     const signature = req.body.signature;
    
@@ -99,7 +100,7 @@ app.get('/user/:hash/pubKey/:pubKey', async (req, res) => {
     const pubKey = req.params.pubKey;
     const timestamp = req.query.timestamp;
     const signature = req.query.signature;
-    const message = timestamp + hash;
+    const message = timestamp + hash + pubKey;
    
     const foundUser = await user.getUser(hash);
 
