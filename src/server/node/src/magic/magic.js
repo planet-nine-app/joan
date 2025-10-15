@@ -91,6 +91,104 @@ console.log('forwarding spell to: ', destination);
       body: JSON.stringify(spell),
       headers: {'Content-Type': 'application/json'}
     });
+  },
+
+  // 🪄 MAGIC-ROUTED ENDPOINTS (No auth needed - resolver authorizes)
+
+  joanUserCreate: async (spell) => {
+    try {
+      const { pubKey, hash } = spell.components;
+
+      if (!pubKey || !hash) {
+        return {
+          success: false,
+          error: 'Missing required fields: pubKey, hash'
+        };
+      }
+
+      const userToPut = { pubKey, hash };
+      const foundUser = await user.putUser(userToPut);
+
+      return {
+        success: true,
+        user: foundUser
+      };
+    } catch (err) {
+      console.error('joanUserCreate error:', err);
+      return {
+        success: false,
+        error: err.message
+      };
+    }
+  },
+
+  joanUserUpdateHash: async (spell) => {
+    try {
+      const { uuid, hash, newHash } = spell.components;
+
+      if (!uuid || !hash || !newHash) {
+        return {
+          success: false,
+          error: 'Missing required fields: uuid, hash, newHash'
+        };
+      }
+
+      // Verify user exists
+      const foundUser = await user.getUser(hash);
+      if (!foundUser) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      const updatedUser = await user.updateHash(hash, newHash);
+
+      return {
+        success: true,
+        user: updatedUser
+      };
+    } catch (err) {
+      console.error('joanUserUpdateHash error:', err);
+      return {
+        success: false,
+        error: err.message
+      };
+    }
+  },
+
+  joanUserDelete: async (spell) => {
+    try {
+      const { uuid, hash } = spell.components;
+
+      if (!uuid || !hash) {
+        return {
+          success: false,
+          error: 'Missing required fields: uuid, hash'
+        };
+      }
+
+      // Verify user exists
+      const foundUser = await user.getUser(hash);
+      if (!foundUser) {
+        return {
+          success: false,
+          error: 'User not found'
+        };
+      }
+
+      const success = await user.deleteUser(hash);
+
+      return {
+        success: success
+      };
+    } catch (err) {
+      console.error('joanUserDelete error:', err);
+      return {
+        success: false,
+        error: err.message
+      };
+    }
   }
 };
 
