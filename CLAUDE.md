@@ -17,6 +17,12 @@ Joan is a Planet Nine allyabase microservice that handles file storage and retri
 
 ## API Endpoints
 
+### Authentication
+- `POST /auth/email/send-otp` - Send OTP code to email
+- `POST /auth/email/verify-otp` - Verify OTP and create/return user
+- `GET /auth/github/initiate` - Initiate GitHub OAuth flow
+- `GET /auth/github/callback` - GitHub OAuth callback handler
+
 ### File Operations
 - `POST /file/:uuid` - Upload file for user
 - `GET /file/:uuid/:filename` - Retrieve specific file
@@ -50,5 +56,31 @@ All Joan REST endpoints have been converted to MAGIC protocol spells:
 
 All file operations maintain the same functionality as the original REST endpoints while benefiting from centralized Fount authentication and MAGIC protocol features like experience granting and gateway rewards.
 
+## Authentication Implementation (November 2025)
+
+Joan now includes authentication endpoints for user-friendly sign-in flows:
+
+### Email OTP Authentication
+- **Implementation**: `/src/auth/otp.js`
+- Uses 6-digit OTP codes sent via Minnie SMTP service
+- 10-minute expiration for security
+- Email hash used as Joan user identifier
+
+### GitHub OAuth Authentication
+- **Implementation**: `/src/auth/oauth.js`
+- Full OAuth 2.0 flow with CSRF protection
+- Fetches user profile and email from GitHub API
+- GitHub ID used as Joan user identifier
+
+### Environment Variables
+- `MINNIE_HOST` - Minnie SMTP server (default: localhost)
+- `MINNIE_PORT` - Minnie SMTP port (default: 2525)
+- `GITHUB_CLIENT_ID` - GitHub OAuth application ID
+- `GITHUB_CLIENT_SECRET` - GitHub OAuth application secret
+- `GITHUB_REDIRECT_URI` - OAuth callback URL (default: http://localhost:3004/auth/github/callback)
+
+### User Creation
+Both authentication methods automatically create Joan users with sessionless cryptographic keys when new users sign in. Private keys are returned only on first sign-in.
+
 ## Last Updated
-October 14, 2025 - Completed full MAGIC protocol conversion. All 5 routes now accessible via MAGIC spells with centralized Fount authentication.
+November 12, 2025 - Added authentication endpoints (Email OTP + GitHub OAuth) for user sign-in flows. Authentication features consolidated from allyabase deployment to main Joan repository.
