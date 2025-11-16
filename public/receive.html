@@ -207,6 +207,12 @@
         <div class="subtitle">Capturing data from bioluminescent waves</div>
         
         <button id="startBtn">Start Camera</button>
+        <div style="margin-top: 15px; margin-bottom: 15px;">
+            <label style="display: inline-flex; align-items: center; gap: 10px; cursor: pointer;">
+                <input type="checkbox" id="modeToggle" style="width: 20px; height: 20px; cursor: pointer;">
+                <span>Quaternary Mode (4 colors)</span>
+            </label>
+        </div>
         <button id="captureBtn" style="display: none;">Start Capturing</button>
         <button id="stopBtn" style="display: none;">Stop</button>
         
@@ -248,16 +254,19 @@
         const videoContainer = document.getElementById('video-container');
         const receivedMessage = document.getElementById('receivedMessage');
         const debugDiv = document.getElementById('debug');
-        
+        const modeToggle = document.getElementById('modeToggle');
+
         let stream = null;
         let isCapturing = false;
         let captureInterval = null;
-        
+        let isQuaternaryMode = false;
+
         let bitBuffer = [];
         let consecutiveSameBits = 0;
         let lastBit = -1;
         const BITS_NEEDED_FOR_STABILITY = 3; // Need same bit 3 times to confirm
-        const EXPECTED_START_MARKER = [1, 0, 1, 0, 1, 0, 1, 0];
+        const EXPECTED_START_MARKER_BINARY = [1, 0, 1, 0, 1, 0, 1, 0];
+        const EXPECTED_START_MARKER_QUATERNARY = [0, 1, 2, 3, 0, 1, 2, 3];
         
         let decodedBits = [];
         let foundStart = false;
@@ -344,82 +353,146 @@
             return { r: avgR, g: avgG, b: avgB };
         }
         
-        function colorToBit(color) {
-            // Determine if it's a 1 (purple/magenta) or 0 (green)
-            // Purple has high R and B, medium G
-            // Green has high G, lower R and B
-            
-            const purpleScore = color.r * 0.5 + color.b * 0.5 - color.g * 0.3;
-            const greenScore = color.g - color.r * 0.3 - color.b * 0.3;
-            
-            return greenScore > purpleScore ? 0 : 1;
+        function colorToValue(color) {
+            // The Advancement color palette classification
+            if (isQuaternaryMode) {
+                // 4 colors: 0=Purple, 1=Pink, 2=Green, 3=Yellow
+                // Calculate distance to each color
+                const colors = [
+                    { r: 208, g: 160, b: 255, value: 0 }, // Purple
+                    { r: 236, g: 72, b: 153, value: 1 },  // Pink
+                    { r: 16, g: 185, b: 129, value: 2 },  // Green
+                    { r: 251, g: 191, b: 36, value: 3 }   // Yellow
+                ];
+
+                let minDistance = Infinity;
+                let closestValue = 0;
+
+                for (const c of colors) {
+                    const distance = Math.sqrt(
+                        Math.pow(color.r - c.r, 2) +
+                        Math.pow(color.g - c.g, 2) +
+                        Math.pow(color.b - c.b, 2)
+                    );
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        closestValue = c.value;
+                    }
+                }
+
+                return closestValue;
+            } else {
+                // Binary: 0=Green, 1=Purple
+                const purpleScore = color.r * 0.5 + color.b * 0.5 - color.g * 0.3;
+                const greenScore = color.g - color.r * 0.3 - color.b * 0.3;
+
+                return greenScore > purpleScore ? 0 : 1;
+            }
         }
         
         function checkStartMarker(bits) {
             if (bits.length < 8) return false;
             const last8 = bits.slice(-8);
-            return last8.every((bit, i) => bit === EXPECTED_START_MARKER[i]);
+            const expected = isQuaternaryMode ? EXPECTED_START_MARKER_QUATERNARY : EXPECTED_START_MARKER_BINARY;
+            return last8.every((bit, i) => bit === expected[i]);
         }
         
-        function decodeMessage(bits) {
-            // bits should be: [start marker (8)] [length (8)] [message (length * 8)] [end marker (8)]
-            
-            // Already found and removed start marker
-            if (bits.length < 8) return null;
-            
-            // Get length (first 8 bits after start marker)
-            let length = 0;
-            for (let i = 0; i < 8; i++) {
-                length = (length << 1) | bits[i];
-            }
-            
-            log(`Decoded length: ${length}`);
-            
-            // Check if we have enough bits for the message
-            const expectedTotalBits = 8 + (length * 8) + 8; // length + message + end marker
-            if (bits.length < expectedTotalBits) {
-                log(`Not enough bits yet. Have ${bits.length}, need ${expectedTotalBits}`);
-                return null;
-            }
-            
-            // Decode message
-            let message = '';
-            for (let i = 0; i < length; i++) {
-                let charCode = 0;
-                for (let j = 0; j < 8; j++) {
-                    const bitIndex = 8 + (i * 8) + j;
-                    if (bitIndex >= bits.length) break;
-                    charCode = (charCode << 1) | bits[bitIndex];
+        function decodeMessage(values) {
+            if (isQuaternaryMode) {
+                // Quaternary: 4 symbols per character, each symbol = 2 bits
+                // Already found and removed start marker
+                if (values.length < 4) return null;
+
+                // Get length (first 4 quaternary symbols = 8 bits after start marker)
+                let length = 0;
+                for (let i = 0; i < 4; i++) {
+                    length = (length << 2) | values[i];
                 }
-                message += String.fromCharCode(charCode);
+
+                log(`Decoded length: ${length}`);
+
+                // Check if we have enough symbols for the message
+                const expectedTotalSymbols = 4 + (length * 4) + 8; // length + message + end marker
+                if (values.length < expectedTotalSymbols) {
+                    log(`Not enough symbols yet. Have ${values.length}, need ${expectedTotalSymbols}`);
+                    return null;
+                }
+
+                // Decode message
+                let message = '';
+                for (let i = 0; i < length; i++) {
+                    let charCode = 0;
+                    for (let j = 0; j < 4; j++) {
+                        const symbolIndex = 4 + (i * 4) + j;
+                        if (symbolIndex >= values.length) break;
+                        charCode = (charCode << 2) | values[symbolIndex];
+                    }
+                    message += String.fromCharCode(charCode);
+                }
+
+                return message;
+            } else {
+                // Binary mode (original)
+                // bits should be: [start marker (8)] [length (8)] [message (length * 8)] [end marker (8)]
+
+                // Already found and removed start marker
+                if (values.length < 8) return null;
+
+                // Get length (first 8 bits after start marker)
+                let length = 0;
+                for (let i = 0; i < 8; i++) {
+                    length = (length << 1) | values[i];
+                }
+
+                log(`Decoded length: ${length}`);
+
+                // Check if we have enough bits for the message
+                const expectedTotalBits = 8 + (length * 8) + 8; // length + message + end marker
+                if (values.length < expectedTotalBits) {
+                    log(`Not enough bits yet. Have ${values.length}, need ${expectedTotalBits}`);
+                    return null;
+                }
+
+                // Decode message
+                let message = '';
+                for (let i = 0; i < length; i++) {
+                    let charCode = 0;
+                    for (let j = 0; j < 8; j++) {
+                        const bitIndex = 8 + (i * 8) + j;
+                        if (bitIndex >= values.length) break;
+                        charCode = (charCode << 1) | values[bitIndex];
+                    }
+                    message += String.fromCharCode(charCode);
+                }
+
+                return message;
             }
-            
-            return message;
         }
         
         function captureFrame() {
             if (!isCapturing) return;
-            
+
             const color = sampleCenterPixels();
-            const bit = colorToBit(color);
+            const value = colorToValue(color);
             
-            // Stability check: only add bit if we see it consistently
-            if (bit === lastBit) {
+            // Stability check: only add value if we see it consistently
+            if (value === lastBit) {
                 consecutiveSameBits++;
             } else {
                 consecutiveSameBits = 1;
-                lastBit = bit;
+                lastBit = value;
             }
-            
+
             if (consecutiveSameBits >= BITS_NEEDED_FOR_STABILITY) {
-                // Add the bit to our buffer
-                bitBuffer.push(bit);
-                
+                // Add the value to our buffer
+                bitBuffer.push(value);
+
                 // Reset consecutive counter
                 consecutiveSameBits = 0;
                 lastBit = -1;
-                
-                log(`Bit: ${bit} (R:${color.r.toFixed(0)} G:${color.g.toFixed(0)} B:${color.b.toFixed(0)}) - Buffer: ${bitBuffer.length}`);
+
+                const unit = isQuaternaryMode ? 'Symbol' : 'Bit';
+                log(`${unit}: ${value} (R:${color.r.toFixed(0)} G:${color.g.toFixed(0)} B:${color.b.toFixed(0)}) - Buffer: ${bitBuffer.length}`);
                 
                 // Check for start marker
                 if (!foundStart && checkStartMarker(bitBuffer)) {
@@ -471,15 +544,18 @@
         
         function startCapturing() {
             isCapturing = true;
+            isQuaternaryMode = modeToggle.checked;
             captureBtn.style.display = 'none';
             stopBtn.style.display = 'inline-block';
-            status.textContent = 'Capturing... Hold steady and keep the pattern centered';
+            modeToggle.disabled = true;
+            const mode = isQuaternaryMode ? 'Quaternary (4 colors)' : 'Binary (2 colors)';
+            status.textContent = `Capturing (${mode})... Hold steady and keep the pattern centered`;
             status.classList.add('receiving');
             debugDiv.style.display = 'block';
             receivedMessage.classList.remove('show');
-            
+
             resetCapture();
-            
+
             // Capture at ~15 fps
             captureInterval = setInterval(captureFrame, 66);
         }
@@ -488,11 +564,12 @@
             isCapturing = false;
             captureBtn.style.display = 'inline-block';
             stopBtn.style.display = 'none';
+            modeToggle.disabled = false;
             status.classList.remove('receiving');
             if (captureInterval) {
                 clearInterval(captureInterval);
             }
-            
+
             if (status.textContent.includes('Capturing')) {
                 status.textContent = 'Capture stopped. Ready to try again.';
             }

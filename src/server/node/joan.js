@@ -1,4 +1,5 @@
 import config from './config/local.js';
+import path from 'path';
 import express from 'express';
 import cors from 'cors';
 import { createHash } from 'node:crypto';
@@ -369,6 +370,10 @@ console.warn(err);
     res.send({ error: 'Not Found' });
   }
 });
+
+// Serve static files from public directory (phosphorescent data transfer, etc.)
+const publicPath = path.join(import.meta.dirname, '../../../public');
+app.use(express.static(publicPath));
 
 app.listen(3004);
 
