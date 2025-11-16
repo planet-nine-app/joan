@@ -170,9 +170,13 @@
         <div class="info">
             <strong>How to use:</strong><br>
             1. Enter your message above<br>
-            2. Click "Transmit" to begin the light pattern<br>
-            3. Point your phone camera at the glowing pattern<br>
-            4. Open the receiver app on your phone to capture the data
+            2. Choose Binary (2 colors) or Quaternary (4 colors) mode<br>
+            3. Click "Transmit" - you'll see:<br>
+            &nbsp;&nbsp;• Long GREEN pulse = starting signal<br>
+            &nbsp;&nbsp;• Flashing colors = your message being encoded<br>
+            &nbsp;&nbsp;• Long PURPLE pulse = end signal<br>
+            4. Point receiver camera at screen during transmission<br>
+            5. Auto-stops when complete!
         </div>
     </div>
 
@@ -191,7 +195,10 @@
         let currentBit = 0;
         let frameCount = 0;
         let isQuaternaryMode = false;
+        let transmissionPhase = 'start'; // 'start', 'data', 'end'
+        let phaseFrameCount = 0;
         const FRAMES_PER_BIT = 8; // How many frames to show each bit
+        const LONG_PULSE_FRAMES = FRAMES_PER_BIT * 3; // Long pulse = 3x normal
         const SYNC_FRAMES = 20; // Frames for sync pattern
         
         // Encode string to binary or quaternary array with markers
@@ -378,17 +385,51 @@
         
         function animate() {
             if (!isTransmitting) return;
-            
+
             frameCount++;
-            
-            // Change bit every FRAMES_PER_BIT frames
-            if (frameCount % FRAMES_PER_BIT === 0) {
-                currentBit = (currentBit + 1) % encodedData.length;
+            phaseFrameCount++;
+
+            let value;
+
+            if (transmissionPhase === 'start') {
+                // Long green pulse (0) to signal start
+                value = 0;
+                drawBioluminescentPattern(value);
+
+                if (phaseFrameCount >= LONG_PULSE_FRAMES) {
+                    transmissionPhase = 'data';
+                    phaseFrameCount = 0;
+                    currentBit = 0;
+                    status.textContent = status.textContent.replace('Starting', 'Transmitting');
+                }
+            } else if (transmissionPhase === 'data') {
+                // Normal data transmission
+                // Change bit every FRAMES_PER_BIT frames
+                if (frameCount % FRAMES_PER_BIT === 0) {
+                    currentBit++;
+                    if (currentBit >= encodedData.length) {
+                        // Data complete, move to end pulse
+                        transmissionPhase = 'end';
+                        phaseFrameCount = 0;
+                    }
+                }
+
+                if (currentBit < encodedData.length) {
+                    value = encodedData[currentBit];
+                    drawBioluminescentPattern(value);
+                }
+            } else if (transmissionPhase === 'end') {
+                // Long purple pulse (1) to signal end
+                value = 1;
+                drawBioluminescentPattern(value);
+
+                if (phaseFrameCount >= LONG_PULSE_FRAMES) {
+                    // Transmission complete
+                    stopTransmission();
+                    return;
+                }
             }
-            
-            const value = encodedData[currentBit];
-            drawBioluminescentPattern(value);
-            
+
             animationId = requestAnimationFrame(animate);
         }
         
@@ -403,6 +444,8 @@
             encodedData = encodeMessage(message);
             currentBit = 0;
             frameCount = 0;
+            phaseFrameCount = 0;
+            transmissionPhase = 'start';
             isTransmitting = true;
 
             transmitBtn.style.display = 'none';
@@ -411,7 +454,7 @@
             modeToggle.disabled = true;
             const mode = isQuaternaryMode ? 'Quaternary (4 colors)' : 'Binary (2 colors)';
             const unit = isQuaternaryMode ? 'symbols' : 'bits';
-            status.textContent = `Transmitting "${message}"... (${encodedData.length} ${unit}, ${mode})`;
+            status.textContent = `Starting transmission "${message}"... (${encodedData.length} ${unit}, ${mode})`;
             status.classList.add('active');
 
             animate();

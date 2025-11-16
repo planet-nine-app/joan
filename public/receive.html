@@ -234,10 +234,14 @@
         <div class="info">
             <strong>How to use:</strong><br>
             1. Click "Start Camera" and allow camera access<br>
-            2. Point your camera at the transmitting screen<br>
-            3. Center the glowing pattern in the circle<br>
-            4. Click "Start Capturing" to decode the message<br>
-            5. Hold steady for a few seconds
+            2. Select Binary or Quaternary mode (match transmitter)<br>
+            3. Click "Start Capturing" to begin listening<br>
+            4. Point camera at transmitting screen<br>
+            5. Look for:<br>
+            &nbsp;&nbsp;• Long GREEN pulse = transmission starting<br>
+            &nbsp;&nbsp;• Flashing colors = data being sent<br>
+            &nbsp;&nbsp;• Long PURPLE pulse = transmission complete<br>
+            6. Message will auto-decode when complete!
         </div>
         
         <div class="debug" id="debug" style="display: none;"></div>
@@ -265,14 +269,19 @@
         let consecutiveSameBits = 0;
         let lastBit = -1;
         const BITS_NEEDED_FOR_STABILITY = 3; // Need same bit 3 times to confirm
+        const LONG_PULSE_THRESHOLD = 10; // Detect long pulses (3x normal)
         const EXPECTED_START_MARKER_BINARY = [1, 0, 1, 0, 1, 0, 1, 0];
         const EXPECTED_START_MARKER_QUATERNARY = [0, 1, 2, 3, 0, 1, 2, 3];
-        
+
         let decodedBits = [];
         let foundStart = false;
+        let foundDataStart = false;
         let messageLength = 0;
         let receivingLength = false;
         let lengthBits = [];
+        let longPulseCounter = 0;
+        let lastStableValue = -1;
+        let processingLog = [];
         
         function log(message) {
             console.log(message);
@@ -474,7 +483,50 @@
 
             const color = sampleCenterPixels();
             const value = colorToValue(color);
-            
+
+            // Detect long pulses (start/stop signals)
+            if (value === lastStableValue) {
+                longPulseCounter++;
+            } else {
+                // Value changed, check if we had a long pulse
+                if (longPulseCounter >= LONG_PULSE_THRESHOLD) {
+                    const pulseType = lastStableValue === 0 ? 'START (green)' :
+                                     lastStableValue === 1 ? 'STOP (purple)' : 'UNKNOWN';
+                    log(`🌟 LONG PULSE DETECTED: ${pulseType} (${longPulseCounter} frames)`);
+                    processingLog.push(`Long pulse: ${pulseType}`);
+
+                    if (!foundStart && lastStableValue === 0) {
+                        foundStart = true;
+                        status.textContent = '🟢 Start signal detected! Reading data...';
+                        processingLog.push('▶ Starting data capture');
+                    } else if (foundStart && lastStableValue === 1) {
+                        log('🟣 Stop signal detected! Processing data...');
+                        processingLog.push('⏸ Stop signal received');
+                        processingLog.push(`📊 Total values captured: ${bitBuffer.length}`);
+
+                        // Try to decode the message
+                        const message = decodeMessage(bitBuffer);
+                        if (message) {
+                            processingLog.push(`✅ Successfully decoded: "${message}"`);
+                            log(`✓ MESSAGE DECODED: ${message}`);
+                            displayMessage(message, processingLog.join('\n'));
+                        } else {
+                            processingLog.push('❌ Failed to decode message');
+                            status.textContent = 'Decoding failed. Try again.';
+                        }
+                        resetCapture();
+                        return;
+                    }
+                }
+                longPulseCounter = 0;
+                lastStableValue = value;
+            }
+
+            // Only process normal data if we've seen the start pulse
+            if (!foundStart) {
+                return;
+            }
+
             // Stability check: only add value if we see it consistently
             if (value === lastBit) {
                 consecutiveSameBits++;
@@ -493,30 +545,21 @@
 
                 const unit = isQuaternaryMode ? 'Symbol' : 'Bit';
                 log(`${unit}: ${value} (R:${color.r.toFixed(0)} G:${color.g.toFixed(0)} B:${color.b.toFixed(0)}) - Buffer: ${bitBuffer.length}`);
-                
-                // Check for start marker
-                if (!foundStart && checkStartMarker(bitBuffer)) {
-                    foundStart = true;
+
+                // Check for data start marker
+                if (!foundDataStart && checkStartMarker(bitBuffer)) {
+                    foundDataStart = true;
                     // Remove the start marker from buffer
                     bitBuffer = bitBuffer.slice(8);
-                    log('✓ START MARKER FOUND!');
-                    status.textContent = 'Start marker detected! Receiving message...';
+                    log('✓ DATA START MARKER FOUND!');
+                    processingLog.push('📍 Data start marker detected');
+                    status.textContent = '📡 Receiving message data...';
                 }
-                
-                // If we found start, collect the rest
-                if (foundStart) {
-                    // Try to decode
-                    const message = decodeMessage(bitBuffer);
-                    if (message) {
-                        log(`✓ MESSAGE DECODED: ${message}`);
-                        displayMessage(message);
-                        resetCapture();
-                    }
-                }
-                
+
                 // Prevent buffer from growing too large
                 if (bitBuffer.length > 1000) {
                     log('Buffer overflow, resetting...');
+                    processingLog.push('⚠️ Buffer overflow');
                     resetCapture();
                 }
             }
@@ -525,21 +568,30 @@
         function resetCapture() {
             bitBuffer = [];
             foundStart = false;
+            foundDataStart = false;
             messageLength = 0;
             receivingLength = false;
             lengthBits = [];
             consecutiveSameBits = 0;
             lastBit = -1;
+            longPulseCounter = 0;
+            lastStableValue = -1;
+            processingLog = [];
         }
         
-        function displayMessage(message) {
-            receivedMessage.textContent = message;
+        function displayMessage(message, processingInfo) {
+            receivedMessage.innerHTML = `
+                <div style="font-size: 1.5em; margin-bottom: 15px;">"${message}"</div>
+                <div style="font-size: 0.8em; opacity: 0.8; white-space: pre-line; text-align: left; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 5px;">
+                    ${processingInfo}
+                </div>
+            `;
             receivedMessage.classList.add('show');
-            status.textContent = 'Message received successfully!';
+            status.textContent = '✅ Message received successfully!';
             status.classList.remove('receiving');
-            
-            // Stop capturing after successful decode
-            stopCapturing();
+
+            // Keep capturing to receive more messages
+            resetCapture();
         }
         
         function startCapturing() {
