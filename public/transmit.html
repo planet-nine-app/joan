@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Light Transmitter - Phosphorescent Data</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0015;
+            font-family: 'Courier New', monospace;
+            color: #a0ffa0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #d0a0ff;
+            margin-bottom: 10px;
+            font-size: 2em;
+            text-shadow: 0 0 20px #d0a0ff;
+        }
+        
+        .subtitle {
+            color: #80ff80;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+        
+        .input-section {
+            margin-bottom: 30px;
+        }
+        
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            background: rgba(160, 255, 160, 0.1);
+            border: 2px solid #80ff80;
+            border-radius: 10px;
+            color: #a0ffa0;
+            font-size: 1.1em;
+            font-family: 'Courier New', monospace;
+            box-shadow: 0 0 20px rgba(128, 255, 128, 0.3);
+            transition: all 0.3s;
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            box-shadow: 0 0 30px rgba(128, 255, 128, 0.5);
+            background: rgba(160, 255, 160, 0.15);
+        }
+        
+        button {
+            background: linear-gradient(135deg, #d0a0ff, #80ff80);
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            color: #0a0015;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 15px;
+            box-shadow: 0 0 30px rgba(160, 255, 160, 0.5);
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 40px rgba(160, 255, 160, 0.7);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        #canvas-container {
+            margin-top: 30px;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 0 60px rgba(160, 255, 160, 0.4);
+            background: #000;
+        }
+        
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            max-height: 70vh;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(160, 255, 160, 0.1);
+            border-radius: 10px;
+            font-size: 0.9em;
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .status.active {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(128, 255, 128, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(208, 160, 255, 0.5); }
+        }
+        
+        .info {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(208, 160, 255, 0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(208, 160, 255, 0.3);
+            text-align: left;
+            font-size: 0.85em;
+            line-height: 1.6;
+        }
+        
+        .info strong {
+            color: #d0a0ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✧ Light Transmitter ✧</h1>
+        <div class="subtitle">Encoding data in bioluminescent waves</div>
+        
+        <div class="input-section">
+            <input type="text" id="dataInput" placeholder="Enter your message..." maxlength="100">
+            <button id="transmitBtn">Transmit</button>
+            <button id="stopBtn" style="display: none;">Stop</button>
+        </div>
+        
+        <div id="canvas-container">
+            <canvas id="lightCanvas" width="800" height="800"></canvas>
+        </div>
+        
+        <div class="status" id="status">
+            Ready to transmit...
+        </div>
+        
+        <div class="info">
+            <strong>How to use:</strong><br>
+            1. Enter your message above<br>
+            2. Click "Transmit" to begin the light pattern<br>
+            3. Point your phone camera at the glowing pattern<br>
+            4. Open the receiver app on your phone to capture the data
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('lightCanvas');
+        const ctx = canvas.getContext('2d');
+        const dataInput = document.getElementById('dataInput');
+        const transmitBtn = document.getElementById('transmitBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        
+        let animationId = null;
+        let isTransmitting = false;
+        let encodedData = [];
+        let currentBit = 0;
+        let frameCount = 0;
+        const FRAMES_PER_BIT = 8; // How many frames to show each bit
+        const SYNC_FRAMES = 20; // Frames for sync pattern
+        
+        // Encode string to binary array with markers
+        function encodeMessage(message) {
+            if (!message) return [];
+            
+            const bits = [];
+            
+            // Start marker: 10101010 (alternating pattern)
+            for (let i = 0; i < 8; i++) {
+                bits.push(i % 2);
+            }
+            
+            // Length of message (8 bits, max 255 chars)
+            const length = message.length;
+            for (let i = 7; i >= 0; i--) {
+                bits.push((length >> i) & 1);
+            }
+            
+            // Actual message data
+            for (let i = 0; i < message.length; i++) {
+                const charCode = message.charCodeAt(i);
+                // 8 bits per character
+                for (let j = 7; j >= 0; j--) {
+                    bits.push((charCode >> j) & 1);
+                }
+            }
+            
+            // End marker: 01010101
+            for (let i = 0; i < 8; i++) {
+                bits.push((i + 1) % 2);
+            }
+            
+            return bits;
+        }
+        
+        function drawBioluminescentPattern(bit) {
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            
+            // Clear with dark background
+            ctx.fillStyle = '#0a0015';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Calculate colors based on bit value and animation
+            const phase = (frameCount % FRAMES_PER_BIT) / FRAMES_PER_BIT;
+            const pulse = Math.sin(phase * Math.PI * 2) * 0.3 + 0.7;
+            
+            // Bit 1: More purple/magenta
+            // Bit 0: More green
+            let r, g, b;
+            if (bit === 1) {
+                r = Math.floor(208 * pulse);
+                g = Math.floor(160 * pulse * 0.6);
+                b = Math.floor(255 * pulse);
+            } else {
+                r = Math.floor(128 * pulse * 0.4);
+                g = Math.floor(255 * pulse);
+                b = Math.floor(128 * pulse * 0.6);
+            }
+            
+            // Draw multiple concentric glowing circles
+            const maxRadius = Math.min(width, height) * 0.4;
+            const numCircles = 20;
+            
+            for (let i = numCircles; i >= 0; i--) {
+                const radius = (maxRadius / numCircles) * i;
+                const alpha = (1 - i / numCircles) * 0.8;
+                const waveOffset = Math.sin(frameCount * 0.05 + i * 0.2) * 20;
+                
+                const gradient = ctx.createRadialGradient(
+                    centerX, centerY, 0,
+                    centerX, centerY, radius + waveOffset
+                );
+                
+                gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                gradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius + waveOffset, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Add organic "veins" or tendrils
+            ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.4)`;
+            ctx.lineWidth = 3;
+            const numTendrils = 8;
+            
+            for (let i = 0; i < numTendrils; i++) {
+                const angle = (i / numTendrils) * Math.PI * 2 + frameCount * 0.01;
+                const tendrilLength = maxRadius * 1.2;
+                
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                
+                const segments = 20;
+                for (let s = 0; s <= segments; s++) {
+                    const t = s / segments;
+                    const x = centerX + Math.cos(angle) * tendrilLength * t +
+                              Math.sin(frameCount * 0.05 + s * 0.3) * 30 * t;
+                    const y = centerY + Math.sin(angle) * tendrilLength * t +
+                              Math.cos(frameCount * 0.05 + s * 0.3) * 30 * t;
+                    ctx.lineTo(x, y);
+                }
+                
+                ctx.stroke();
+            }
+            
+            // Central bright spot
+            const centerGradient = ctx.createRadialGradient(
+                centerX, centerY, 0,
+                centerX, centerY, 50
+            );
+            centerGradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 1)`);
+            centerGradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+            
+            ctx.fillStyle = centerGradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 50, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function animate() {
+            if (!isTransmitting) return;
+            
+            frameCount++;
+            
+            // Change bit every FRAMES_PER_BIT frames
+            if (frameCount % FRAMES_PER_BIT === 0) {
+                currentBit = (currentBit + 1) % encodedData.length;
+            }
+            
+            const bit = encodedData[currentBit];
+            drawBioluminescentPattern(bit);
+            
+            animationId = requestAnimationFrame(animate);
+        }
+        
+        function startTransmission() {
+            const message = dataInput.value.trim();
+            if (!message) {
+                status.textContent = 'Please enter a message first';
+                return;
+            }
+            
+            encodedData = encodeMessage(message);
+            currentBit = 0;
+            frameCount = 0;
+            isTransmitting = true;
+            
+            transmitBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            dataInput.disabled = true;
+            status.textContent = `Transmitting "${message}"... (${encodedData.length} bits)`;
+            status.classList.add('active');
+            
+            animate();
+        }
+        
+        function stopTransmission() {
+            isTransmitting = false;
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+            
+            transmitBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+            dataInput.disabled = false;
+            status.textContent = 'Transmission stopped';
+            status.classList.remove('active');
+            
+            // Clear canvas
+            ctx.fillStyle = '#0a0015';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        transmitBtn.addEventListener('click', startTransmission);
+        stopBtn.addEventListener('click', stopTransmission);
+        
+        dataInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                startTransmission();
+            }
+        });
+        
+        // Draw idle pattern
+        function drawIdlePattern() {
+            if (isTransmitting) return;
+            
+            const width = canvas.width;
+            const height = canvas.height;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            
+            ctx.fillStyle = '#0a0015';
+            ctx.fillRect(0, 0, width, height);
+            
+            const time = Date.now() * 0.001;
+            
+            // Gentle ambient glow
+            const gradient = ctx.createRadialGradient(
+                centerX, centerY, 0,
+                centerX, centerY, 300
+            );
+            
+            const r = 150 + Math.sin(time * 0.5) * 50;
+            const g = 180 + Math.sin(time * 0.7) * 50;
+            const b = 200 + Math.sin(time * 0.3) * 50;
+            
+            gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.3)`);
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 300, 0, Math.PI * 2);
+            ctx.fill();
+            
+            requestAnimationFrame(drawIdlePattern);
+        }
+        
+        drawIdlePattern();
+    </script>
+</body>
+</html>

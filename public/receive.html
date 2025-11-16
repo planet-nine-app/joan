@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Light Receiver - Phosphorescent Capture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #0a0015;
+            font-family: 'Courier New', monospace;
+            color: #a0ffa0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #d0a0ff;
+            margin-bottom: 10px;
+            font-size: 1.8em;
+            text-shadow: 0 0 20px #d0a0ff;
+        }
+        
+        .subtitle {
+            color: #80ff80;
+            margin-bottom: 20px;
+            font-size: 0.85em;
+            opacity: 0.8;
+        }
+        
+        #video-container {
+            position: relative;
+            margin: 20px 0;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 0 60px rgba(160, 255, 160, 0.4);
+            background: #000;
+            width: 100%;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        video {
+            display: block;
+            width: 100%;
+            height: auto;
+            transform: scaleX(-1); /* Mirror the video */
+        }
+        
+        #sampling-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px;
+            height: 100px;
+            border: 3px solid #80ff80;
+            border-radius: 50%;
+            pointer-events: none;
+            box-shadow: 0 0 20px rgba(128, 255, 128, 0.6);
+            animation: pulse-ring 2s infinite;
+        }
+        
+        @keyframes pulse-ring {
+            0%, 100% { 
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 0.8;
+            }
+            50% { 
+                transform: translate(-50%, -50%) scale(1.1);
+                opacity: 1;
+            }
+        }
+        
+        canvas {
+            display: none;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #d0a0ff, #80ff80);
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            color: #0a0015;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 10px 5px;
+            box-shadow: 0 0 30px rgba(160, 255, 160, 0.5);
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 40px rgba(160, 255, 160, 0.7);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(160, 255, 160, 0.1);
+            border-radius: 10px;
+            font-size: 0.9em;
+            min-height: 60px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        
+        .status.receiving {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 20px rgba(128, 255, 128, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(208, 160, 255, 0.5); }
+        }
+        
+        .received-message {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(208, 160, 255, 0.15);
+            border-radius: 10px;
+            border: 2px solid #d0a0ff;
+            word-break: break-all;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2em;
+            color: #d0a0ff;
+            text-shadow: 0 0 10px #d0a0ff;
+            display: none;
+        }
+        
+        .received-message.show {
+            display: flex;
+            animation: glow-in 0.5s ease-out;
+        }
+        
+        @keyframes glow-in {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        
+        .debug {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            font-size: 0.75em;
+            text-align: left;
+            color: #80ff80;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(208, 160, 255, 0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(208, 160, 255, 0.3);
+            text-align: left;
+            font-size: 0.85em;
+            line-height: 1.6;
+        }
+        
+        .info strong {
+            color: #d0a0ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✧ Light Receiver ✧</h1>
+        <div class="subtitle">Capturing data from bioluminescent waves</div>
+        
+        <button id="startBtn">Start Camera</button>
+        <button id="captureBtn" style="display: none;">Start Capturing</button>
+        <button id="stopBtn" style="display: none;">Stop</button>
+        
+        <div id="video-container" style="display: none;">
+            <video id="video" autoplay playsinline></video>
+            <div id="sampling-indicator"></div>
+        </div>
+        
+        <canvas id="canvas"></canvas>
+        
+        <div class="status" id="status">
+            Click "Start Camera" to begin...
+        </div>
+        
+        <div class="received-message" id="receivedMessage">
+            
+        </div>
+        
+        <div class="info">
+            <strong>How to use:</strong><br>
+            1. Click "Start Camera" and allow camera access<br>
+            2. Point your camera at the transmitting screen<br>
+            3. Center the glowing pattern in the circle<br>
+            4. Click "Start Capturing" to decode the message<br>
+            5. Hold steady for a few seconds
+        </div>
+        
+        <div class="debug" id="debug" style="display: none;"></div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const videoContainer = document.getElementById('video-container');
+        const receivedMessage = document.getElementById('receivedMessage');
+        const debugDiv = document.getElementById('debug');
+        
+        let stream = null;
+        let isCapturing = false;
+        let captureInterval = null;
+        
+        let bitBuffer = [];
+        let consecutiveSameBits = 0;
+        let lastBit = -1;
+        const BITS_NEEDED_FOR_STABILITY = 3; // Need same bit 3 times to confirm
+        const EXPECTED_START_MARKER = [1, 0, 1, 0, 1, 0, 1, 0];
+        
+        let decodedBits = [];
+        let foundStart = false;
+        let messageLength = 0;
+        let receivingLength = false;
+        let lengthBits = [];
+        
+        function log(message) {
+            console.log(message);
+            debugDiv.innerHTML += message + '<br>';
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+        
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment', // Use back camera on mobile
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+                
+                video.srcObject = stream;
+                videoContainer.style.display = 'block';
+                startBtn.style.display = 'none';
+                captureBtn.style.display = 'inline-block';
+                status.textContent = 'Camera ready! Point at the transmitter and click "Start Capturing"';
+                
+            } catch (error) {
+                status.textContent = 'Error accessing camera: ' + error.message;
+                log('Camera error: ' + error.message);
+            }
+        }
+        
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            videoContainer.style.display = 'none';
+            startBtn.style.display = 'inline-block';
+            captureBtn.style.display = 'none';
+            stopBtn.style.display = 'none';
+            isCapturing = false;
+            if (captureInterval) {
+                clearInterval(captureInterval);
+            }
+            status.textContent = 'Camera stopped';
+            status.classList.remove('receiving');
+        }
+        
+        function sampleCenterPixels() {
+            // Draw current video frame to canvas
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+            
+            // Sample a small area in the center
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const sampleSize = 50; // Sample a 50x50 pixel area
+            
+            const imageData = ctx.getImageData(
+                centerX - sampleSize / 2,
+                centerY - sampleSize / 2,
+                sampleSize,
+                sampleSize
+            );
+            
+            let totalR = 0, totalG = 0, totalB = 0;
+            const pixels = imageData.data.length / 4;
+            
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                totalR += imageData.data[i];
+                totalG += imageData.data[i + 1];
+                totalB += imageData.data[i + 2];
+            }
+            
+            const avgR = totalR / pixels;
+            const avgG = totalG / pixels;
+            const avgB = totalB / pixels;
+            
+            return { r: avgR, g: avgG, b: avgB };
+        }
+        
+        function colorToBit(color) {
+            // Determine if it's a 1 (purple/magenta) or 0 (green)
+            // Purple has high R and B, medium G
+            // Green has high G, lower R and B
+            
+            const purpleScore = color.r * 0.5 + color.b * 0.5 - color.g * 0.3;
+            const greenScore = color.g - color.r * 0.3 - color.b * 0.3;
+            
+            return greenScore > purpleScore ? 0 : 1;
+        }
+        
+        function checkStartMarker(bits) {
+            if (bits.length < 8) return false;
+            const last8 = bits.slice(-8);
+            return last8.every((bit, i) => bit === EXPECTED_START_MARKER[i]);
+        }
+        
+        function decodeMessage(bits) {
+            // bits should be: [start marker (8)] [length (8)] [message (length * 8)] [end marker (8)]
+            
+            // Already found and removed start marker
+            if (bits.length < 8) return null;
+            
+            // Get length (first 8 bits after start marker)
+            let length = 0;
+            for (let i = 0; i < 8; i++) {
+                length = (length << 1) | bits[i];
+            }
+            
+            log(`Decoded length: ${length}`);
+            
+            // Check if we have enough bits for the message
+            const expectedTotalBits = 8 + (length * 8) + 8; // length + message + end marker
+            if (bits.length < expectedTotalBits) {
+                log(`Not enough bits yet. Have ${bits.length}, need ${expectedTotalBits}`);
+                return null;
+            }
+            
+            // Decode message
+            let message = '';
+            for (let i = 0; i < length; i++) {
+                let charCode = 0;
+                for (let j = 0; j < 8; j++) {
+                    const bitIndex = 8 + (i * 8) + j;
+                    if (bitIndex >= bits.length) break;
+                    charCode = (charCode << 1) | bits[bitIndex];
+                }
+                message += String.fromCharCode(charCode);
+            }
+            
+            return message;
+        }
+        
+        function captureFrame() {
+            if (!isCapturing) return;
+            
+            const color = sampleCenterPixels();
+            const bit = colorToBit(color);
+            
+            // Stability check: only add bit if we see it consistently
+            if (bit === lastBit) {
+                consecutiveSameBits++;
+            } else {
+                consecutiveSameBits = 1;
+                lastBit = bit;
+            }
+            
+            if (consecutiveSameBits >= BITS_NEEDED_FOR_STABILITY) {
+                // Add the bit to our buffer
+                bitBuffer.push(bit);
+                
+                // Reset consecutive counter
+                consecutiveSameBits = 0;
+                lastBit = -1;
+                
+                log(`Bit: ${bit} (R:${color.r.toFixed(0)} G:${color.g.toFixed(0)} B:${color.b.toFixed(0)}) - Buffer: ${bitBuffer.length}`);
+                
+                // Check for start marker
+                if (!foundStart && checkStartMarker(bitBuffer)) {
+                    foundStart = true;
+                    // Remove the start marker from buffer
+                    bitBuffer = bitBuffer.slice(8);
+                    log('✓ START MARKER FOUND!');
+                    status.textContent = 'Start marker detected! Receiving message...';
+                }
+                
+                // If we found start, collect the rest
+                if (foundStart) {
+                    // Try to decode
+                    const message = decodeMessage(bitBuffer);
+                    if (message) {
+                        log(`✓ MESSAGE DECODED: ${message}`);
+                        displayMessage(message);
+                        resetCapture();
+                    }
+                }
+                
+                // Prevent buffer from growing too large
+                if (bitBuffer.length > 1000) {
+                    log('Buffer overflow, resetting...');
+                    resetCapture();
+                }
+            }
+        }
+        
+        function resetCapture() {
+            bitBuffer = [];
+            foundStart = false;
+            messageLength = 0;
+            receivingLength = false;
+            lengthBits = [];
+            consecutiveSameBits = 0;
+            lastBit = -1;
+        }
+        
+        function displayMessage(message) {
+            receivedMessage.textContent = message;
+            receivedMessage.classList.add('show');
+            status.textContent = 'Message received successfully!';
+            status.classList.remove('receiving');
+            
+            // Stop capturing after successful decode
+            stopCapturing();
+        }
+        
+        function startCapturing() {
+            isCapturing = true;
+            captureBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            status.textContent = 'Capturing... Hold steady and keep the pattern centered';
+            status.classList.add('receiving');
+            debugDiv.style.display = 'block';
+            receivedMessage.classList.remove('show');
+            
+            resetCapture();
+            
+            // Capture at ~15 fps
+            captureInterval = setInterval(captureFrame, 66);
+        }
+        
+        function stopCapturing() {
+            isCapturing = false;
+            captureBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+            status.classList.remove('receiving');
+            if (captureInterval) {
+                clearInterval(captureInterval);
+            }
+            
+            if (status.textContent.includes('Capturing')) {
+                status.textContent = 'Capture stopped. Ready to try again.';
+            }
+        }
+        
+        startBtn.addEventListener('click', startCamera);
+        captureBtn.addEventListener('click', startCapturing);
+        stopBtn.addEventListener('click', stopCapturing);
+        
+        // Handle page visibility to stop camera when tab is hidden
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && isCapturing) {
+                stopCapturing();
+            }
+        });
+    </script>
+</body>
+</html>
