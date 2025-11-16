@@ -149,6 +149,12 @@
         
         <div class="input-section">
             <input type="text" id="dataInput" placeholder="Enter your message..." maxlength="100">
+            <div style="margin-top: 15px;">
+                <label style="display: inline-flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="modeToggle" style="width: 20px; height: 20px; cursor: pointer;">
+                    <span>Quaternary Mode (4 colors, 2x faster)</span>
+                </label>
+            </div>
             <button id="transmitBtn">Transmit</button>
             <button id="stopBtn" style="display: none;">Stop</button>
         </div>
@@ -177,74 +183,135 @@
         const transmitBtn = document.getElementById('transmitBtn');
         const stopBtn = document.getElementById('stopBtn');
         const status = document.getElementById('status');
-        
+        const modeToggle = document.getElementById('modeToggle');
+
         let animationId = null;
         let isTransmitting = false;
         let encodedData = [];
         let currentBit = 0;
         let frameCount = 0;
+        let isQuaternaryMode = false;
         const FRAMES_PER_BIT = 8; // How many frames to show each bit
         const SYNC_FRAMES = 20; // Frames for sync pattern
         
-        // Encode string to binary array with markers
+        // Encode string to binary or quaternary array with markers
         function encodeMessage(message) {
             if (!message) return [];
-            
-            const bits = [];
-            
-            // Start marker: 10101010 (alternating pattern)
-            for (let i = 0; i < 8; i++) {
-                bits.push(i % 2);
-            }
-            
-            // Length of message (8 bits, max 255 chars)
-            const length = message.length;
-            for (let i = 7; i >= 0; i--) {
-                bits.push((length >> i) & 1);
-            }
-            
-            // Actual message data
-            for (let i = 0; i < message.length; i++) {
-                const charCode = message.charCodeAt(i);
-                // 8 bits per character
-                for (let j = 7; j >= 0; j--) {
-                    bits.push((charCode >> j) & 1);
+
+            if (isQuaternaryMode) {
+                // Quaternary encoding: 4 symbols (0,1,2,3) representing 2 bits each
+                const symbols = [];
+
+                // Start marker: 0,1,2,3,0,1,2,3 (ascending pattern for sync)
+                for (let i = 0; i < 8; i++) {
+                    symbols.push(i % 4);
                 }
+
+                // Length of message (4 quaternary symbols = 8 bits, max 255 chars)
+                const length = message.length;
+                for (let i = 3; i >= 0; i--) {
+                    symbols.push((length >> (i * 2)) & 3);
+                }
+
+                // Actual message data
+                for (let i = 0; i < message.length; i++) {
+                    const charCode = message.charCodeAt(i);
+                    // 4 quaternary symbols per character (8 bits)
+                    for (let j = 3; j >= 0; j--) {
+                        symbols.push((charCode >> (j * 2)) & 3);
+                    }
+                }
+
+                // End marker: 3,2,1,0,3,2,1,0 (descending pattern)
+                for (let i = 0; i < 8; i++) {
+                    symbols.push(3 - (i % 4));
+                }
+
+                return symbols;
+            } else {
+                // Binary encoding (original)
+                const bits = [];
+
+                // Start marker: 10101010 (alternating pattern)
+                for (let i = 0; i < 8; i++) {
+                    bits.push(i % 2);
+                }
+
+                // Length of message (8 bits, max 255 chars)
+                const length = message.length;
+                for (let i = 7; i >= 0; i--) {
+                    bits.push((length >> i) & 1);
+                }
+
+                // Actual message data
+                for (let i = 0; i < message.length; i++) {
+                    const charCode = message.charCodeAt(i);
+                    // 8 bits per character
+                    for (let j = 7; j >= 0; j--) {
+                        bits.push((charCode >> j) & 1);
+                    }
+                }
+
+                // End marker: 01010101
+                for (let i = 0; i < 8; i++) {
+                    bits.push((i + 1) % 2);
+                }
+
+                return bits;
             }
-            
-            // End marker: 01010101
-            for (let i = 0; i < 8; i++) {
-                bits.push((i + 1) % 2);
-            }
-            
-            return bits;
         }
         
-        function drawBioluminescentPattern(bit) {
+        function drawBioluminescentPattern(value) {
             const width = canvas.width;
             const height = canvas.height;
             const centerX = width / 2;
             const centerY = height / 2;
-            
+
             // Clear with dark background
             ctx.fillStyle = '#0a0015';
             ctx.fillRect(0, 0, width, height);
-            
-            // Calculate colors based on bit value and animation
+
+            // Calculate colors based on value and animation
             const phase = (frameCount % FRAMES_PER_BIT) / FRAMES_PER_BIT;
             const pulse = Math.sin(phase * Math.PI * 2) * 0.3 + 0.7;
-            
-            // Bit 1: More purple/magenta
-            // Bit 0: More green
+
+            // The Advancement color palette
             let r, g, b;
-            if (bit === 1) {
-                r = Math.floor(208 * pulse);
-                g = Math.floor(160 * pulse * 0.6);
-                b = Math.floor(255 * pulse);
+            if (isQuaternaryMode) {
+                // Quaternary: 0=Purple, 1=Pink, 2=Green, 3=Yellow
+                switch(value) {
+                    case 0: // Purple #d0a0ff
+                        r = Math.floor(208 * pulse);
+                        g = Math.floor(160 * pulse);
+                        b = Math.floor(255 * pulse);
+                        break;
+                    case 1: // Pink #ec4899
+                        r = Math.floor(236 * pulse);
+                        g = Math.floor(72 * pulse);
+                        b = Math.floor(153 * pulse);
+                        break;
+                    case 2: // Green #10b981
+                        r = Math.floor(16 * pulse);
+                        g = Math.floor(185 * pulse);
+                        b = Math.floor(129 * pulse);
+                        break;
+                    case 3: // Yellow #fbbf24
+                        r = Math.floor(251 * pulse);
+                        g = Math.floor(191 * pulse);
+                        b = Math.floor(36 * pulse);
+                        break;
+                }
             } else {
-                r = Math.floor(128 * pulse * 0.4);
-                g = Math.floor(255 * pulse);
-                b = Math.floor(128 * pulse * 0.6);
+                // Binary: 0=Green, 1=Purple
+                if (value === 1) {
+                    r = Math.floor(208 * pulse);
+                    g = Math.floor(160 * pulse);
+                    b = Math.floor(255 * pulse);
+                } else {
+                    r = Math.floor(16 * pulse);
+                    g = Math.floor(185 * pulse);
+                    b = Math.floor(129 * pulse);
+                }
             }
             
             // Draw multiple concentric glowing circles
@@ -319,8 +386,8 @@
                 currentBit = (currentBit + 1) % encodedData.length;
             }
             
-            const bit = encodedData[currentBit];
-            drawBioluminescentPattern(bit);
+            const value = encodedData[currentBit];
+            drawBioluminescentPattern(value);
             
             animationId = requestAnimationFrame(animate);
         }
@@ -331,18 +398,22 @@
                 status.textContent = 'Please enter a message first';
                 return;
             }
-            
+
+            isQuaternaryMode = modeToggle.checked;
             encodedData = encodeMessage(message);
             currentBit = 0;
             frameCount = 0;
             isTransmitting = true;
-            
+
             transmitBtn.style.display = 'none';
             stopBtn.style.display = 'inline-block';
             dataInput.disabled = true;
-            status.textContent = `Transmitting "${message}"... (${encodedData.length} bits)`;
+            modeToggle.disabled = true;
+            const mode = isQuaternaryMode ? 'Quaternary (4 colors)' : 'Binary (2 colors)';
+            const unit = isQuaternaryMode ? 'symbols' : 'bits';
+            status.textContent = `Transmitting "${message}"... (${encodedData.length} ${unit}, ${mode})`;
             status.classList.add('active');
-            
+
             animate();
         }
         
@@ -351,13 +422,14 @@
             if (animationId) {
                 cancelAnimationFrame(animationId);
             }
-            
+
             transmitBtn.style.display = 'inline-block';
             stopBtn.style.display = 'none';
             dataInput.disabled = false;
+            modeToggle.disabled = false;
             status.textContent = 'Transmission stopped';
             status.classList.remove('active');
-            
+
             // Clear canvas
             ctx.fillStyle = '#0a0015';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
