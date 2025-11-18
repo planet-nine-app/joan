@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emoji Particle Transmitter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0015;
+            font-family: 'Courier New', monospace;
+            color: #a0ffa0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #d0a0ff;
+            margin-bottom: 10px;
+            font-size: 2em;
+            text-shadow: 0 0 20px #d0a0ff;
+        }
+
+        .subtitle {
+            color: #80ff80;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .color-legend {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .color-sample {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+        }
+
+        .color-box {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            box-shadow: 0 0 10px currentColor;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            background: rgba(160, 255, 160, 0.1);
+            border: 2px solid #80ff80;
+            border-radius: 10px;
+            color: #a0ffa0;
+            font-size: 1.1em;
+            font-family: 'Courier New', monospace;
+            box-shadow: 0 0 20px rgba(128, 255, 128, 0.3);
+            margin-bottom: 15px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #d0a0ff, #80ff80);
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            color: #0a0015;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 5px;
+            box-shadow: 0 0 30px rgba(160, 255, 160, 0.5);
+        }
+
+        #canvas-container {
+            margin-top: 30px;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 0 60px rgba(160, 255, 160, 0.4);
+            background: #000;
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 600px;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(160, 255, 160, 0.1);
+            border-radius: 10px;
+            font-size: 0.9em;
+        }
+
+        .legend {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(208, 160, 255, 0.1);
+            border-radius: 10px;
+            text-align: left;
+            font-size: 0.85em;
+        }
+
+        .legend-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .legend-item {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .legend-item .emoji {
+            font-size: 2em;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .legend-item .dir {
+            font-size: 1.5em;
+            color: #80ff80;
+            margin-bottom: 5px;
+        }
+
+        .legend-item .value {
+            font-size: 0.8em;
+            color: #d0a0ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✨ Emoji Particle Transmitter ✨</h1>
+        <div class="subtitle">4 bits per particle • Color + Emoji = Magic</div>
+        <div class="color-legend">
+            <div class="color-sample">
+                <div class="color-box" style="background: #d0a0ff; color: #d0a0ff;"></div>
+                <span>Purple (00)</span>
+            </div>
+            <div class="color-sample">
+                <div class="color-box" style="background: #ec4899; color: #ec4899;"></div>
+                <span>Pink (01)</span>
+            </div>
+            <div class="color-sample">
+                <div class="color-box" style="background: #10b981; color: #10b981;"></div>
+                <span>Green (10)</span>
+            </div>
+            <div class="color-sample">
+                <div class="color-box" style="background: #fbbf24; color: #fbbf24;"></div>
+                <span>Yellow (11)</span>
+            </div>
+        </div>
+
+        <input type="text" id="dataInput" placeholder="Enter your message..." maxlength="50">
+        <div>
+            <button id="transmitBtn">Transmit</button>
+            <button id="stopBtn" style="display: none;">Stop</button>
+        </div>
+
+        <div id="canvas-container">
+            <canvas id="particleCanvas"></canvas>
+        </div>
+
+        <div class="status" id="status">
+            Ready to transmit...
+        </div>
+
+        <div class="legend">
+            <strong>Encoding Scheme (4 bits per particle):</strong>
+            <div style="margin: 10px 0; font-size: 0.85em;">
+                🧭 Direction (2 bits) + 🎨 Color+Emoji (2 bits, same encoding!) = 4 bits total<br>
+                <span style="opacity: 0.7;">Color and emoji encode the SAME 2 bits for error correction</span>
+            </div>
+            <div class="legend-grid">
+                <!-- Up (00) + Color/Emoji -->
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(208, 160, 255, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">↑</span>
+                    <span class="emoji">😊</span>
+                    <span class="value">0000 (0)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">↑</span>
+                    <span class="emoji">🍃</span>
+                    <span class="value">0001 (1)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">↑</span>
+                    <span class="emoji">✌️</span>
+                    <span class="value">0010 (2)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">↑</span>
+                    <span class="emoji">❤️</span>
+                    <span class="value">0011 (3)</span>
+                </div>
+                <!-- Down (01) + Color/Emoji -->
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(208, 160, 255, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">↓</span>
+                    <span class="emoji">😊</span>
+                    <span class="value">0100 (4)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">↓</span>
+                    <span class="emoji">🍃</span>
+                    <span class="value">0101 (5)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">↓</span>
+                    <span class="emoji">✌️</span>
+                    <span class="value">0110 (6)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">↓</span>
+                    <span class="emoji">❤️</span>
+                    <span class="value">0111 (7)</span>
+                </div>
+                <!-- Left (10) + Color/Emoji -->
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(208, 160, 255, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">←</span>
+                    <span class="emoji">😊</span>
+                    <span class="value">1000 (8)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">←</span>
+                    <span class="emoji">🍃</span>
+                    <span class="value">1001 (9)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">←</span>
+                    <span class="emoji">✌️</span>
+                    <span class="value">1010 (10)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">←</span>
+                    <span class="emoji">❤️</span>
+                    <span class="value">1011 (11)</span>
+                </div>
+                <!-- Right (11) + Color/Emoji -->
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(208, 160, 255, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">→</span>
+                    <span class="emoji">😊</span>
+                    <span class="value">1100 (12)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">→</span>
+                    <span class="emoji">🍃</span>
+                    <span class="value">1101 (13)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">→</span>
+                    <span class="emoji">✌️</span>
+                    <span class="value">1110 (14)</span>
+                </div>
+                <div class="legend-item" style="background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(0, 0, 0, 0.3));">
+                    <span class="dir">→</span>
+                    <span class="emoji">❤️</span>
+                    <span class="value">1111 (15)</span>
+                </div>
+            </div>
+            <div style="margin-top: 15px; font-size: 0.8em; opacity: 0.7;">
+                💡 Each character = 2 particles (8 bits) • Camera detects color + direction, emoji provides redundancy!
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        const dataInput = document.getElementById('dataInput');
+        const transmitBtn = document.getElementById('transmitBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+
+        // Set canvas size
+        canvas.width = 900;
+        canvas.height = 600;
+
+        let particles = [];
+        let isTransmitting = false;
+        let animationId = null;
+        let encodedData = [];
+        let currentSymbolIndex = 0;
+        let framesSinceLastEmit = 0;
+        const FRAMES_PER_SYMBOL = 30; // Emit one particle every 30 frames (~0.5 seconds at 60fps)
+
+        // Color + Emoji encode the SAME 2 bits (redundant for error correction!)
+        // 00=Purple+😊, 01=Pink+🍃, 10=Green+✌️, 11=Yellow+❤️
+        const COLOR_EMOJI_PAIRS = [
+            { color: { name: 'purple', hex: '#d0a0ff', rgb: [208, 160, 255] }, emoji: '😊', value: 0 },
+            { color: { name: 'pink', hex: '#ec4899', rgb: [236, 72, 153] }, emoji: '🍃', value: 1 },
+            { color: { name: 'green', hex: '#10b981', rgb: [16, 185, 129] }, emoji: '✌️', value: 2 },
+            { color: { name: 'yellow', hex: '#fbbf24', rgb: [251, 191, 36] }, emoji: '❤️', value: 3 }
+        ];
+
+        // Direction mapping: 00=up, 01=down, 10=left, 11=right
+        const DIRECTIONS = [
+            { name: 'up', vx: 0, vy: -3, value: 0 },
+            { name: 'down', vx: 0, vy: 3, value: 1 },
+            { name: 'left', vx: -3, vy: 0, value: 2 },
+            { name: 'right', vx: 3, vy: 0, value: 3 }
+        ];
+
+        function encodeMessage(message) {
+            const symbols = [];
+
+            for (let i = 0; i < message.length; i++) {
+                const charCode = message.charCodeAt(i);
+                // Split 8-bit character into two 4-bit symbols
+                const highNibble = (charCode >> 4) & 0xF; // Upper 4 bits
+                const lowNibble = charCode & 0xF;         // Lower 4 bits
+
+                symbols.push(highNibble);
+                symbols.push(lowNibble);
+            }
+
+            return symbols;
+        }
+
+        function symbolToParticle(symbol) {
+            // Symbol is 4 bits: [direction bit 1][direction bit 0][color/emoji bit 1][color/emoji bit 0]
+            const dirIndex = (symbol >> 2) & 0x3;        // Upper 2 bits = direction
+            const colorEmojiIndex = symbol & 0x3;        // Lower 2 bits = color/emoji (same value!)
+
+            const pair = COLOR_EMOJI_PAIRS[colorEmojiIndex];
+            const direction = DIRECTIONS[dirIndex];
+
+            return {
+                emoji: pair.emoji,
+                backgroundColor: pair.color.hex,
+                bgColor: pair.color,
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                vx: direction.vx,
+                vy: direction.vy,
+                dirName: direction.name,
+                dirValue: direction.value,
+                colorEmojiValue: pair.value,
+                lifetime: 0,
+                maxLifetime: 120, // Frames until particle disappears
+                size: 60 // Circle radius for background
+            };
+        }
+
+        function emitParticle() {
+            if (currentSymbolIndex >= encodedData.length) {
+                // All symbols emitted
+                stopTransmission();
+                return;
+            }
+
+            const symbol = encodedData[currentSymbolIndex];
+            const particle = symbolToParticle(symbol);
+            particles.push(particle);
+
+            currentSymbolIndex++;
+
+            // Update status
+            status.textContent = `Transmitting... ${currentSymbolIndex}/${encodedData.length} particles emitted`;
+        }
+
+        function updateParticles() {
+            particles = particles.filter(p => {
+                p.lifetime++;
+                if (p.lifetime > p.maxLifetime) return false;
+
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // Keep particles that are still visible
+                return p.x > -50 && p.x < canvas.width + 50 &&
+                       p.y > -50 && p.y < canvas.height + 50;
+            });
+        }
+
+        function drawParticles() {
+            // Clear canvas with dark background
+            ctx.fillStyle = '#0a0015';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            particles.forEach(particle => {
+                const alpha = Math.max(0, 1 - (particle.lifetime / particle.maxLifetime));
+
+                // Draw colored background circle with glow
+                ctx.globalAlpha = alpha * 0.8;
+                const gradient = ctx.createRadialGradient(
+                    particle.x, particle.y, 0,
+                    particle.x, particle.y, particle.size
+                );
+                gradient.addColorStop(0, particle.backgroundColor);
+                gradient.addColorStop(0.7, particle.backgroundColor);
+                gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Add bright glow ring
+                ctx.globalAlpha = alpha * 0.4;
+                ctx.strokeStyle = particle.backgroundColor;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Draw emoji on top
+                ctx.globalAlpha = alpha;
+                ctx.font = '48px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(particle.emoji, particle.x, particle.y);
+            });
+
+            ctx.globalAlpha = 1;
+        }
+
+        function animate() {
+            if (!isTransmitting && particles.length === 0) {
+                cancelAnimationFrame(animationId);
+                return;
+            }
+
+            framesSinceLastEmit++;
+
+            if (isTransmitting && framesSinceLastEmit >= FRAMES_PER_SYMBOL) {
+                emitParticle();
+                framesSinceLastEmit = 0;
+            }
+
+            updateParticles();
+            drawParticles();
+
+            animationId = requestAnimationFrame(animate);
+        }
+
+        function startTransmission() {
+            const message = dataInput.value.trim();
+            if (!message) {
+                status.textContent = 'Please enter a message first';
+                return;
+            }
+
+            encodedData = encodeMessage(message);
+            currentSymbolIndex = 0;
+            framesSinceLastEmit = FRAMES_PER_SYMBOL; // Emit first particle immediately
+            particles = [];
+            isTransmitting = true;
+
+            transmitBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            dataInput.disabled = true;
+
+            status.textContent = `Starting transmission of "${message}" (${encodedData.length} particles)...`;
+
+            animate();
+        }
+
+        function stopTransmission() {
+            isTransmitting = false;
+            transmitBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+            dataInput.disabled = false;
+
+            if (currentSymbolIndex >= encodedData.length) {
+                status.textContent = `Transmission complete! ${currentSymbolIndex} particles sent.`;
+            } else {
+                status.textContent = 'Transmission stopped.';
+            }
+        }
+
+        transmitBtn.addEventListener('click', startTransmission);
+        stopBtn.addEventListener('click', stopTransmission);
+
+        dataInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                startTransmission();
+            }
+        });
+
+        // Draw idle state
+        ctx.fillStyle = '#0a0015';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#d0a0ff';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Ready to transmit emoji particles...', canvas.width / 2, canvas.height / 2);
+    </script>
+</body>
+</html>

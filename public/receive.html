@@ -406,6 +406,71 @@
             return last8.every((bit, i) => bit === expected[i]);
         }
         
+        function decodeMessageForced(values) {
+            // Force decode whatever we have when stop signal received
+            if (isQuaternaryMode) {
+                // Quaternary: try to decode with available data
+                if (values.length < 4) {
+                    log('Not enough data for length field');
+                    return null;
+                }
+
+                // Get length (first 4 quaternary symbols = 8 bits)
+                let length = 0;
+                for (let i = 0; i < 4; i++) {
+                    length = (length << 2) | values[i];
+                }
+
+                log(`Decoded length: ${length}, have ${values.length} symbols, need ${4 + length * 4}`);
+
+                // Decode whatever message data we have
+                let message = '';
+                const availableChars = Math.min(length, Math.floor((values.length - 4) / 4));
+
+                for (let i = 0; i < availableChars; i++) {
+                    let charCode = 0;
+                    for (let j = 0; j < 4; j++) {
+                        const symbolIndex = 4 + (i * 4) + j;
+                        if (symbolIndex >= values.length) break;
+                        charCode = (charCode << 2) | values[symbolIndex];
+                    }
+                    message += String.fromCharCode(charCode);
+                }
+
+                return message || null;
+            } else {
+                // Binary: try to decode with available data
+                if (values.length < 8) {
+                    log('Not enough data for length field');
+                    return null;
+                }
+
+                // Get length (first 8 bits)
+                let length = 0;
+                for (let i = 0; i < 8; i++) {
+                    length = (length << 1) | values[i];
+                }
+
+                log(`Decoded length: ${length}, have ${values.length} bits, need ${8 + length * 8}`);
+
+                // Decode whatever message data we have
+                let message = '';
+                const availableChars = Math.min(length, Math.floor((values.length - 8) / 8));
+
+                for (let i = 0; i < availableChars; i++) {
+                    let charCode = 0;
+                    for (let j = 0; j < 8; j++) {
+                        const bitIndex = 8 + (i * 8) + j;
+                        if (bitIndex >= values.length) break;
+                        charCode = (charCode << 1) | values[bitIndex];
+                    }
+                    message += String.fromCharCode(charCode);
+                }
+
+                return message || null;
+            }
+        }
+
         function decodeMessage(values) {
             if (isQuaternaryMode) {
                 // Quaternary: 4 symbols per character, each symbol = 2 bits
@@ -504,14 +569,15 @@
                         processingLog.push('⏸ Stop signal received');
                         processingLog.push(`📊 Total values captured: ${bitBuffer.length}`);
 
-                        // Try to decode the message
-                        const message = decodeMessage(bitBuffer);
+                        // Try to decode the message with whatever we have
+                        const message = decodeMessageForced(bitBuffer);
                         if (message) {
                             processingLog.push(`✅ Successfully decoded: "${message}"`);
                             log(`✓ MESSAGE DECODED: ${message}`);
                             displayMessage(message, processingLog.join('\n'));
                         } else {
                             processingLog.push('❌ Failed to decode message');
+                            log(`Decoding failed. Buffer: ${JSON.stringify(bitBuffer.slice(0, 20))}...`);
                             status.textContent = 'Decoding failed. Try again.';
                         }
                         resetCapture();

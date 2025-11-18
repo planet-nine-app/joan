@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emoji Particle Receiver</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0015;
+            font-family: 'Courier New', monospace;
+            color: #a0ffa0;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        h1 {
+            color: #d0a0ff;
+            margin-bottom: 10px;
+            font-size: 1.8em;
+            text-shadow: 0 0 20px #d0a0ff;
+        }
+
+        button {
+            background: linear-gradient(135deg, #d0a0ff, #80ff80);
+            border: none;
+            padding: 15px 40px;
+            border-radius: 10px;
+            color: #0a0015;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+
+        #video-container {
+            position: relative;
+            margin: 20px 0;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 0 60px rgba(160, 255, 160, 0.4);
+            background: #000;
+            display: none;
+        }
+
+        video {
+            display: block;
+            width: 100%;
+            height: auto;
+            transform: scaleX(-1);
+        }
+
+        canvas {
+            display: none;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(160, 255, 160, 0.1);
+            border-radius: 10px;
+            font-size: 0.9em;
+        }
+
+        .received-message {
+            margin-top: 20px;
+            padding: 20px;
+            background: rgba(208, 160, 255, 0.15);
+            border-radius: 10px;
+            border: 2px solid #d0a0ff;
+            min-height: 80px;
+            font-size: 1.2em;
+            color: #d0a0ff;
+            display: none;
+        }
+
+        .received-message.show {
+            display: block;
+        }
+
+        .detection-log {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            font-size: 0.75em;
+            text-align: left;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .detection-log.show {
+            display: block;
+        }
+
+        .info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(208, 160, 255, 0.1);
+            border-radius: 10px;
+            text-align: left;
+            font-size: 0.85em;
+        }
+
+        .detection-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .detection-item {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+
+        .detection-item .emoji {
+            font-size: 2em;
+        }
+
+        .detection-item .value {
+            font-size: 0.8em;
+            color: #80ff80;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✨ Emoji Particle Receiver ✨</h1>
+
+        <button id="startBtn">Start Camera</button>
+        <button id="captureBtn" style="display: none;">Start Receiving</button>
+        <button id="stopBtn" style="display: none;">Stop</button>
+
+        <div id="video-container">
+            <video id="video" autoplay playsinline></video>
+        </div>
+
+        <canvas id="canvas"></canvas>
+
+        <div class="status" id="status">
+            Click "Start Camera" to begin...
+        </div>
+
+        <div class="received-message" id="receivedMessage"></div>
+
+        <div class="detection-log" id="detectionLog"></div>
+
+        <div class="info">
+            <strong>How it works:</strong><br>
+            1. Point camera at transmitting screen<br>
+            2. Click "Start Receiving" to capture emoji particles<br>
+            3. Camera auto-detects color+emoji (redundant encoding!)<br>
+            4. Manually enter direction you see (↑↓←→)<br>
+            5. Direction (2 bits) + Color/Emoji (2 bits) = 4 bits per particle<br>
+            6. Message auto-decodes as particles are captured!<br><br>
+            <strong>Manual Mode:</strong><br>
+            Enter direction + color/emoji (camera auto-detects color, you add direction):<br>
+            <div id="manual-input" style="margin-top: 10px;">
+                <select id="manualDirection" style="padding: 5px; font-size: 1em;">
+                    <option value="0">↑ Up</option>
+                    <option value="1">↓ Down</option>
+                    <option value="2">← Left</option>
+                    <option value="3">→ Right</option>
+                </select>
+                +
+                <select id="manualColorEmoji" style="padding: 5px; font-size: 1em;">
+                    <option value="0">🟣 Purple 😊</option>
+                    <option value="1">🩷 Pink 🍃</option>
+                    <option value="2">🟢 Green ✌️</option>
+                    <option value="3">🟡 Yellow ❤️</option>
+                </select>
+                <button id="manualAddBtn" style="padding: 5px 15px; font-size: 0.9em;">Add Particle</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const startBtn = document.getElementById('startBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const status = document.getElementById('status');
+        const videoContainer = document.getElementById('video-container');
+        const receivedMessage = document.getElementById('receivedMessage');
+        const detectionLog = document.getElementById('detectionLog');
+        const manualDirection = document.getElementById('manualDirection');
+        const manualColorEmoji = document.getElementById('manualColorEmoji');
+        const manualAddBtn = document.getElementById('manualAddBtn');
+
+        let stream = null;
+        let isCapturing = false;
+        let captureInterval = null;
+        let detectedSymbols = [];
+
+        // Color + Emoji encode the SAME 2 bits (redundant for error correction!)
+        const COLOR_EMOJI_PAIRS = [
+            { color: { name: 'purple', hex: '#d0a0ff', rgb: [208, 160, 255] }, emoji: '😊', value: 0 },
+            { color: { name: 'pink', hex: '#ec4899', rgb: [236, 72, 153] }, emoji: '🍃', value: 1 },
+            { color: { name: 'green', hex: '#10b981', rgb: [16, 185, 129] }, emoji: '✌️', value: 2 },
+            { color: { name: 'yellow', hex: '#fbbf24', rgb: [251, 191, 36] }, emoji: '❤️', value: 3 }
+        ];
+
+        const DIRECTIONS = [
+            { name: 'up', symbol: '↑', value: 0 },
+            { name: 'down', symbol: '↓', value: 1 },
+            { name: 'left', symbol: '←', value: 2 },
+            { name: 'right', symbol: '→', value: 3 }
+        ];
+
+        function log(message) {
+            console.log(message);
+            detectionLog.innerHTML += message + '<br>';
+            detectionLog.scrollTop = detectionLog.scrollHeight;
+        }
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+
+                video.srcObject = stream;
+                videoContainer.style.display = 'block';
+                startBtn.style.display = 'none';
+                captureBtn.style.display = 'inline-block';
+                status.textContent = 'Camera ready! Point at transmitter and click "Start Receiving"';
+            } catch (error) {
+                status.textContent = 'Camera error: ' + error.message + '. Use manual mode below.';
+            }
+        }
+
+        function detectBackgroundOrEmoji() {
+            // Capture frame from video
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+
+            // Sample center area for background color
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const sampleSize = 50;
+
+            const imageData = ctx.getImageData(
+                centerX - sampleSize / 2,
+                centerY - sampleSize / 2,
+                sampleSize,
+                sampleSize
+            );
+
+            // Average RGB values
+            let r = 0, g = 0, b = 0;
+            const pixels = imageData.data.length / 4;
+
+            for (let i = 0; i < imageData.data.length; i += 4) {
+                r += imageData.data[i];
+                g += imageData.data[i + 1];
+                b += imageData.data[i + 2];
+            }
+
+            r = Math.round(r / pixels);
+            g = Math.round(g / pixels);
+            b = Math.round(b / pixels);
+
+            // Detect background color using Euclidean distance
+            const colorIndex = detectBackgroundColor(r, g, b);
+
+            // TODO: Emoji detection
+            // For now, we'll return null for emoji and rely on manual mode
+            // Future: Use template matching or simple shape detection
+            const emojiIndex = null;
+
+            return { colorIndex, emojiIndex };
+        }
+
+        function detectBackgroundColor(r, g, b) {
+            // Find closest background color using Euclidean distance
+            let minDistance = Infinity;
+            let closestIndex = 0;
+
+            COLOR_EMOJI_PAIRS.forEach((pair, index) => {
+                const [cr, cg, cb] = pair.color.rgb;
+                const distance = Math.sqrt(
+                    Math.pow(r - cr, 2) +
+                    Math.pow(g - cg, 2) +
+                    Math.pow(b - cb, 2)
+                );
+
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestIndex = index;
+                }
+            });
+
+            log(`Color detected: RGB(${r}, ${g}, ${b}) -> ${COLOR_EMOJI_PAIRS[closestIndex].color.name} + ${COLOR_EMOJI_PAIRS[closestIndex].emoji} (value=${closestIndex})`);
+            return closestIndex;
+        }
+
+        function addSymbol(symbol) {
+            detectedSymbols.push(symbol);
+            log(`Detected: Symbol ${symbol} (${symbol.toString(2).padStart(4, '0')})`);
+
+            // Try to decode every 2 symbols (= 1 character)
+            if (detectedSymbols.length >= 2 && detectedSymbols.length % 2 === 0) {
+                tryDecode();
+            }
+        }
+
+        function tryDecode() {
+            let message = '';
+
+            for (let i = 0; i < detectedSymbols.length; i += 2) {
+                const highNibble = detectedSymbols[i];
+                const lowNibble = detectedSymbols[i + 1];
+                const charCode = (highNibble << 4) | lowNibble;
+                message += String.fromCharCode(charCode);
+            }
+
+            if (message) {
+                receivedMessage.textContent = `"${message}" (${detectedSymbols.length / 2} chars, ${detectedSymbols.length} particles)`;
+                receivedMessage.classList.add('show');
+                status.textContent = `Receiving... ${detectedSymbols.length} particles captured`;
+            }
+        }
+
+        function startReceiving() {
+            isCapturing = true;
+            captureBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+            status.textContent = 'Receiving... Camera auto-detecting colors! Enter emoji manually if needed.';
+            detectionLog.classList.add('show');
+            detectedSymbols = [];
+            receivedMessage.classList.remove('show');
+
+            // Auto-detection loop - detects background color automatically
+            let lastColorIndex = -1;
+            let colorStabilityCount = 0;
+            const REQUIRED_STABILITY = 5; // Require 5 consecutive same readings
+
+            captureInterval = setInterval(() => {
+                if (!isCapturing) return;
+
+                const detected = detectBackgroundOrEmoji();
+                if (detected && detected.colorIndex !== null) {
+                    // Check color stability
+                    if (detected.colorIndex === lastColorIndex) {
+                        colorStabilityCount++;
+
+                        if (colorStabilityCount === REQUIRED_STABILITY) {
+                            const pair = COLOR_EMOJI_PAIRS[detected.colorIndex];
+                            log(`✓ Stable detection: ${pair.color.name} + ${pair.emoji}`);
+                            status.textContent = `Detected: ${pair.color.name} ${pair.emoji}. Now enter direction!`;
+                        }
+                    } else {
+                        lastColorIndex = detected.colorIndex;
+                        colorStabilityCount = 1;
+                    }
+                }
+            }, 100);
+        }
+
+        function stopReceiving() {
+            isCapturing = false;
+            captureBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+
+            if (captureInterval) {
+                clearInterval(captureInterval);
+            }
+
+            if (detectedSymbols.length > 0) {
+                status.textContent = `Capture stopped. Received ${detectedSymbols.length} particles.`;
+            } else {
+                status.textContent = 'Capture stopped. Ready to try again.';
+            }
+        }
+
+        // Manual input handler
+        manualAddBtn.addEventListener('click', () => {
+            if (!isCapturing) {
+                status.textContent = 'Click "Start Receiving" first!';
+                return;
+            }
+
+            const directionValue = parseInt(manualDirection.value);
+            const colorEmojiValue = parseInt(manualColorEmoji.value);
+
+            // Construct 4-bit symbol: [direction bit 1][direction bit 0][color/emoji bit 1][color/emoji bit 0]
+            const symbol = (directionValue << 2) | colorEmojiValue;
+
+            const dir = DIRECTIONS[directionValue];
+            const pair = COLOR_EMOJI_PAIRS[colorEmojiValue];
+
+            log(`Manual input: ${dir.symbol} ${dir.name} + ${pair.color.name} ${pair.emoji} = ${symbol} (${symbol.toString(2).padStart(4, '0')})`);
+            addSymbol(symbol);
+        });
+
+        startBtn.addEventListener('click', startCamera);
+        captureBtn.addEventListener('click', startReceiving);
+        stopBtn.addEventListener('click', stopReceiving);
+    </script>
+</body>
+</html>
