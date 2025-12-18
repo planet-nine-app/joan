@@ -32,14 +32,15 @@ const _delete = async (url, payload) => {
 const joan = {
   baseURL: 'https://dev.joan.allyabase.com/',
 
-  createUser: async (hash, saveKeys, getKeys) => {
+  createUser: async (appHash, userHash, saveKeys, getKeys) => {
     const keys = (await getKeys()) || (await sessionless.generateKeys(saveKeys, getKeys))
     sessionless.getKeys = getKeys;
 
     const payload = {
       timestamp: new Date().getTime() + '',
       pubKey: keys.pubKey,
-      hash
+      appHash,
+      userHash
     };
 
     payload.signature = await sessionless.sign(payload.timestamp + payload.hash + payload.pubKey);
@@ -51,7 +52,7 @@ const joan = {
     return uuid;
   },
 
-  reenter: async (hash, saveKeys, getKeys) => {
+  reenter: async (appHash, userHash, saveKeys, getKeys) => {
     const keys = await sessionless.generateKeys(saveKeys, getKeys);
     const newPubKey = keys.pubKey;
 
@@ -59,31 +60,31 @@ const joan = {
 
     const signature = await sessionless.sign(timestamp + hash + newPubKey);
 
-    const res = await get(`${joan.baseURL}user/${hash}/pubKey/${newPubKey}?timestamp=${timestamp}&signature=${signature}`);
+    const res = await get(`${joan.baseURL}user/userHash/${userHash}/appHash/${appHash}?timestamp=${timestamp}&pubKey=${newPubKey}&signature=${signature}`);
     const user = await res.json();
 console.log(user);
     
     return user;
   },
 
-  updateHash: async (uuid, hash, newHash) => {
+  updateHash: async (uuid, appHash, userHash, newHash) => {
     const timestamp = new Date().getTime() + '';
 
     const signature = await sessionless.sign(timestamp + uuid + hash + newHash);
-    const payload = {timestamp, uuid, hash, newHash, signature};
+    const payload = {timestamp, uuid, appHash, userHash, newHash, signature};
 
 
     const res = await put(`${joan.baseURL}user/update-hash`, payload);
     return res.status === 202;
   },
 
-  deleteUser: async (uuid, hash) => {
+  deleteUser: async (uuid, appHash) => {
     const timestamp = new Date().getTime() + '';
 
     const signature = await sessionless.sign(timestamp + uuid + hash);
-    const payload = {timestamp, uuid, hash, signature};
+    const payload = {timestamp, uuid, appHash, signature};
 
-    const res = await _delete(`${joan.baseURL}user/${uuid}`, payload);
+    const res = await _delete(`${joan.baseURL}user/${uuid}/delete/appHash/${appHash}`, payload);
     return res.status === 200;
   }
 };

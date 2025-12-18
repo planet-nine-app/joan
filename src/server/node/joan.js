@@ -240,8 +240,9 @@ console.log('got create user req');
     const body = req.body;
 console.log(body);
     const pubKey = body.pubKey;
-    const hash = body.hash;
-    const message = body.timestamp + hash + pubKey;
+    const userHash = body.userHash;
+    const appHash = body.appHash;
+    const message = body.timestamp + userHash + appHash + pubKey;
 console.log('joan verifying', message);
 
     const signature = req.body.signature;
@@ -254,7 +255,8 @@ console.log("auth error");
 console.log('putting user');
     const userToPut = {
       pubKey,
-      hash
+      userHash,
+      appHash
     };
 
     const foundUser = await user.putUser(userToPut);
@@ -266,13 +268,14 @@ console.log(foundUser);
   }
 });
 
-app.get('/user/:hash/pubKey/:pubKey', async (req, res) => {
+app.get('/user/appHash/:appHash/userHash/:userHash', async (req, res) => {
   try {
-    const hash = req.params.hash;
-    const pubKey = req.params.pubKey;
+    const appHash = req.params.appHash;
+    const userHash = req.params.userHash;
     const timestamp = req.query.timestamp;
+    const pubKey = req.query.pubKey;
     const signature = req.query.signature;
-    const message = timestamp + hash + pubKey;
+    const message = timestamp + appHash + userHash + pubKey;
    
     const foundUser = await user.getUser(hash);
 
@@ -282,7 +285,7 @@ app.get('/user/:hash/pubKey/:pubKey', async (req, res) => {
     }
 
     foundUser.pubKey = pubKey;
-    await user.saveUser(foundUser);
+    await user.saveUser(appHash, foundUser);
 
     res.send(foundUser);
   } catch(err) {
@@ -296,7 +299,8 @@ app.put('/user/:uuid/update-hash', async (req, res) => {
     const uuid = req.params.uuid;
     const body = req.body;
     const timestamp = body.timestamp;
-    const hash = body.hash;
+    const appHash = body.appHash;
+    const userHash = body.userHash;
     const newHash = body.newHash;
     const signature = body.signature;
     const message = timestamp + uuid + hash + newHash;
@@ -308,7 +312,7 @@ app.put('/user/:uuid/update-hash', async (req, res) => {
       return res.send({error: 'auth error'});
     }
 
-    const updatedUser = await user.updateHash(hash, newHash);
+    const updatedUser = await user.updateHash(appHash, userHash, newHash);
 
     res.status(202);
     res.send(updatedUser);
@@ -342,26 +346,26 @@ console.warn(err);
   }
 });
 
-app.delete('/user/:uuid', async (req, res) => {
+app.delete('/user/:uuid/delete/appHash/:appHash', async (req, res) => {
   try {
     const uuid = req.params.uuid;
+    const appHash = req.params.appHash;
     const body = req.body;
 
 console.log(body);
     const timestamp = body.timestamp;
-    const hash = body.hash;
     const signature = body.signature;
-    const message = timestamp + uuid + hash;
+    const message = timestamp + uuid + appHash;
 console.log("vars consted");
 
-    const foundUser = await user.getUser(hash);
+    const foundUser = await user.getUserByUUID(appHash, uuid);
 
     if(!signature || !sessionless.verifySignature(signature, message, foundUser.pubKey)) {
       res.status(403);
       return res.send({error: 'auth error'});
     }
 console.log('about to delete');
-    const success = await user.deleteUser(hash);
+    const success = await user.deleteUser(appHash, uuid);
 console.log('success: ', success);
     res.send({ success });
   } catch(err) {

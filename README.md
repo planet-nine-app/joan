@@ -4,7 +4,7 @@
 
 ## Overview
 
-Joan is composed of a CRUD server and database pair, and companion client-side libraries.
+Joan is composed of a CRUD server and database pair, the latter of which defaults to the file system, and companion client-side libraries.
 This repo defines the contract between client and server via REST API, provides database implementation(s) for storing the models used in that contract, and the methods necessary in a client implementation.
 
 The typical usage will look something like:
@@ -35,15 +35,16 @@ It doesn't get much CRUDier than this API:
 
 <details>
  <summary><code>PUT</code> <code><b>/user/create</b></code> <code>Creates a new user if pubKey does not exist, and returns existing uuid if it does and hash is correct.
-signature message is: timestamp + hash + pubKey</code></summary>
+signature message is: timestamp + userHash + appHash + pubKey</code></summary>
 
 ##### Parameters
 
 > | name         |  required     | data type               | description                                                           |
 > |--------------|-----------|-------------------------|-----------------------------------------------------------------------|
-> | pubKey    |  true     | string (hex)            | the publicKey of the user's keypair  |
+> | pubKey       |  true     | string (hex)            | the publicKey of the user's keypair  |
 > | timestamp    |  true     | string                  | in a production system timestamps prevent replay attacks  |
-> | hash         |  true     | string                  | the state hash to save for the user
+> | userHash     |  true     | string                  | the credential hash to save for the user
+> | appHash      |  true     | string                  | the application hash that the user is logging into
 > | signature    |  true     | string (signature)      | the signature from sessionless for the message  |
 
 
@@ -57,20 +58,22 @@ signature message is: timestamp + hash + pubKey</code></summary>
 ##### Example cURL
 
 > ```javascript
->  curl -X PUT -H "Content-Type: application/json" -d '{"pubKey": "key", "timestamp": "now", "signature": "sig"}' https://joan.planetnine.app/user/create
+>  curl -X PUT -H "Content-Type: application/json" -d '{"pubKey": "key", "timestamp": "now", "userHash": "foo", "appHash": "bar", "signature": "sig"}' https://joan.planetnine.app/user/create
 > ```
 
 </details>
 
 <details>
- <summary><code>GET</code> <code><b>/user/:hash/pubKey/:pubKey?timestamp=<timestamp>&signature=<signature of (timestamp + hash + pubKey)></b></code> <code>Returns whether user credentials match what was saved</code></summary>
+ <summary><code>GET</code> <code><b>/user/userHash/:userHash/appHash/:appHash?timestamp=<timestamp>&pubKey=<pubKey>&signature=<signature of (timestamp + userHash + appHash)></b></code> <code>Returns whether user credentials match what was saved</code></summary>
 
 ##### Parameters
 
 > | name         |  required     | data type               | description                                                           |
 > |--------------|-----------|-------------------------|-----------------------------------------------------------------------|
 > | timestamp    |  true     | string                  | in a production system timestamps prevent replay attacks  |
-> | hash         |  true     | string                  | the state hash saved client side
+> | pubKey       |  true     | string                  | the pubKey used for this request
+> | userHash     |  true     | string                  | the credential hash to save for the user
+> | appHash      |  true     | string                  | the application hash that the user is logging into
 > | signature    |  true     | string (signature)      | the signature from sessionless for the message  |
 
 
@@ -84,14 +87,14 @@ signature message is: timestamp + hash + pubKey</code></summary>
 ##### Example cURL
 
 > ```javascript
->  curl -X GET -H "Content-Type: application/json" https://joan.planetnine.app/user/:hash?timestamp=123&pubKey=pubKey&signature=signature 
+>  curl -X GET -H "Content-Type: application/json" https://joan.planetnine.app/user/userHash/foo/appHash/bar?timestamp=123&pubKey=pubKey&signature=signature 
 > ```
 
 </details>
 
 <details>
   <summary><code>PUT</code> <code><b>/user/:uuid/update-hash</b></code> <code>Updates an existing hash to a new hash.
-signature message is:  timestamp + pubkey + hash + newHash</code></summary>
+signature message is:  timestamp + pubkey + userHash + newHash + appHash</code></summary>
 
 ##### Parameters
 
@@ -99,8 +102,9 @@ signature message is:  timestamp + pubkey + hash + newHash</code></summary>
 > |--------------|-----------|-------------------------|-----------------------------------------------------------------------|
 > | timestamp    |  true     | string                  | in a production system timestamps prevent replay attacks  |
 > | userUUID     |  true     | string                  | the user's uuid
-> | hash         |  true     | string                  | the old hash to replace
+> | userHash     |  true     | string                  | the old hash to replace
 > | newHash      |  true     | string                  | the state hash saved client side
+> | appHash      |  true     | string                  | the application hash that the user is logged into
 > | signature    |  true     | string (signature)      | the signature from sessionless for the message  |
 
 
@@ -120,8 +124,8 @@ signature message is:  timestamp + pubkey + hash + newHash</code></summary>
 </details>
 
 <details>
-  <summary><code>DELETE</code> <code><b>/user/delete</b></code> <code>Deletes a uuid and pubKey.
-signature message is: timestamp + userUUID + hash</code></summary>
+  <summary><code>DELETE</code> <code><b>/user/:userUUID/delete/appHash/:appHash</b></code> <code>Deletes a uuid and pubKey.
+signature message is: timestamp + userUUID + appHash</code></summary>
 
 ##### Parameters
 
@@ -129,7 +133,7 @@ signature message is: timestamp + userUUID + hash</code></summary>
 > |--------------|-----------|-------------------------|-----------------------------------------------------------------------|
 > | timestamp    |  true     | string                  | in a production system timestamps prevent replay attacks  |
 > | userUUID     |  true     | string                  | the user's uuid
-> | hash         |  true     | string                  | the old hash to replace
+> | appHash      |  true     | string                  | the application hash that the user is being deleted from
 > | signature    |  true     | string (signature)      | the signature from sessionless for the message  |
 
 ##### Responses
@@ -142,7 +146,7 @@ signature message is: timestamp + userUUID + hash</code></summary>
 ##### Example cURL
 
 > ```javascript
->  curl -X DELETE https://joan.planetnine.app/user/delete
+>  curl -X DELETE https://joan.planetnine.app/user/123-456/delete/appHash/app
 > ```
 
 </details>

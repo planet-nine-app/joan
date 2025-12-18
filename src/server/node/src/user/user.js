@@ -18,8 +18,8 @@ const user = {
     return updatedUser;
   },
 
-  updateHash: async (oldHash, newHash) => {
-    const updatedUser = db.updateHash(oldHash, newHash);
+  updateHash: async (appHash, oldHash, newHash) => {
+    const updatedUser = db.updateHash(appHash, oldHash, newHash);
     return updatedUser;
   },
   

@@ -6,38 +6,48 @@ const client = await createClient()
   .connect();
     
 const db = {
-  getUser: async (hash) => {
-    const user = await client.get(`user:${hash}`);
+  getUserByUserHash: async (appHash, userHash) => {
+    const user = await client.get(`user:${appHash}:${userHash}`);
     const parsedUser = JSON.parse(user);
     return parsedUser; 
+  },
+
+  getUserByUserUUID: async (appHash, uuid) => {
+    const userPath = await client.get(`user:${user.uuid}`);
+    const userString = await client.get(userPath);
+    const parsedUser = JSON.parse(user);
+    return parsedUser;
   },
 
   putUser: async (user) => {
     const uuid = sessionless.generateUUID();
     user.uuid = uuid;
-    await client.set(`user:${user.hash}`, JSON.stringify(user));
+    await client.set(`user:${user.appHash}:${user.userHash}`, JSON.stringify(user));
+    await client.set(`user:${user.uuid}`, {user: `user:${user.appHash}:${user.userHash}`});
     const userToReturn = JSON.parse(JSON.stringify(user));
     return userToReturn;
   },
 
   saveUser: async (user) => {
-    await client.set(`user:${user.hash}`, JSON.stringify(user));
+    await client.set(`user:${user.appHash}:${user.userHash}`, JSON.stringify(user));
     const userToReturn = JSON.parse(JSON.stringify(user));
     return userToReturn;
   },
 
-  updateHash: async (oldHash, newHash) => {
-    const user = await db.getUser(oldHash);
-    user.hash = newHash;
-    const updatedUser = await db.putUser(user);
-    await db.deleteUser(oldHash);
+  updateHash: async (appHash, oldHash, newHash) => {
+    const user = await db.getUser(appHash, oldHash);
+    user.userHash = newHash;
+    const updatedUser = await db.saveUser(user);
+    await db.deleteUser(appHash, user.uuid);
     return updatedUser;
   },
 
-  deleteUser: async (hash) => {
-    const resp = await client.del(`user:${hash}`);
+  deleteUser: async (appHash, uuid) => {
+    const user = db.getUserByUUID(appHash, uuid);
+    const uuidGone = await client.del(`user:${user.uuid}`);
+    const userGone = await client.del(`user:${user.appHash}:${user.userHash}`);
 
-    return true;
+    return uuidGone && userGone;
   },
 
   saveKeys: async (keys) => {
