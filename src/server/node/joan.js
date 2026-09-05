@@ -8,6 +8,8 @@ import fount from 'fount-js';
 import bdo from 'bdo-js';
 import sessionless from 'sessionless-node';
 import db from './src/persistence/db.js';
+import { sendOTP, verifyOTP } from './src/auth/otp.js';
+import { initiateGitHubOAuth, exchangeGitHubCode, getGitHubUser } from './src/auth/oauth.js';
 
 const app = express();
 app.use(cors());
@@ -61,6 +63,175 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// ========================================
+// Authentication Endpoints (OTP + OAuth)
+// ========================================
+
+// Send OTP to email
+app.post('/auth/email/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || !email.includes('@')) {
+      res.status(400);
+      return res.send({ error: 'Valid email required' });
+    }
+
+    console.log(`Sending OTP to ${email}`);
+    const result = await sendOTP(email);
+
+    res.send({
+      success: true,
+      message: 'OTP sent to email',
+      emailHash: result.emailHash
+    });
+  } catch (error) {
+    console.error('Send OTP error:', error);
+    res.status(500);
+    res.send({ error: 'Failed to send OTP' });
+  }
+});
+
+// Verify OTP and create/return user
+app.post('/auth/email/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      res.status(400);
+      return res.send({ error: 'Email and OTP required' });
+    }
+
+    console.log(`Verifying OTP for ${email}`);
+    const verifyResult = verifyOTP(email, otp);
+
+    if (!verifyResult.valid) {
+      res.status(403);
+      return res.send({ error: verifyResult.error });
+    }
+
+    // Generate or retrieve Joan user for this email
+    // Use email hash as the "hash" for Joan's user system
+    const emailHash = verifyResult.emailHash;
+
+    // Check if user exists
+    let joanUser;
+    try {
+      joanUser = await user.getUser(emailHash);
+      console.log('Existing user found:', joanUser);
+    } catch (err) {
+      // User doesn't exist, create new one
+      console.log('Creating new user for email:', email);
+
+      // Generate keys for the user
+      const keys = sessionless.generateKeys(db.saveKeys, db.getKeys);
+
+      const userToPut = {
+        pubKey: keys.publicKey,
+        hash: emailHash
+      };
+
+      joanUser = await user.putUser(userToPut);
+      joanUser.privateKey = keys.privateKey; // Include private key for new users
+    }
+
+    res.send({
+      success: true,
+      userUUID: joanUser.uuid,
+      pubKey: joanUser.pubKey,
+      privateKey: joanUser.privateKey, // Only set for new users
+      email
+    });
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    res.status(500);
+    res.send({ error: 'Failed to verify OTP' });
+  }
+});
+
+// Initiate GitHub OAuth flow
+app.get('/auth/github/initiate', async (req, res) => {
+  try {
+    const redirectUrl = req.query.redirectUrl || 'http://localhost:3004/auth-success';
+
+    console.log('Initiating GitHub OAuth');
+    const result = initiateGitHubOAuth(redirectUrl);
+
+    // Redirect to GitHub
+    res.redirect(result.authUrl);
+  } catch (error) {
+    console.error('GitHub OAuth initiate error:', error);
+    res.status(500);
+    res.send({ error: error.message });
+  }
+});
+
+// GitHub OAuth callback
+app.get('/auth/github/callback', async (req, res) => {
+  try {
+    const { code, state } = req.query;
+
+    if (!code || !state) {
+      return res.redirect('/?error=no_code_or_state');
+    }
+
+    console.log('GitHub OAuth callback received');
+
+    // Exchange code for token
+    const tokenResult = await exchangeGitHubCode(code, state);
+    console.log('Token exchanged successfully');
+
+    // Fetch GitHub user info
+    const githubUser = await getGitHubUser(tokenResult.accessToken);
+    console.log('GitHub user fetched:', githubUser.githubUsername);
+
+    // Create hash from GitHub ID
+    const githubHash = createHash('sha256')
+      .update(`github:${githubUser.githubId}`)
+      .digest('hex');
+
+    // Check if user exists
+    let joanUser;
+    try {
+      joanUser = await user.getUser(githubHash);
+      console.log('Existing GitHub user found');
+    } catch (err) {
+      // User doesn't exist, create new one
+      console.log('Creating new user for GitHub:', githubUser.githubUsername);
+
+      const keys = sessionless.generateKeys(db.saveKeys, db.getKeys);
+
+      const userToPut = {
+        pubKey: keys.publicKey,
+        hash: githubHash
+      };
+
+      joanUser = await user.putUser(userToPut);
+      joanUser.privateKey = keys.privateKey;
+    }
+
+    // Build success redirect with user data
+    const successUrl = new URL(tokenResult.redirectUrl);
+    successUrl.searchParams.set('userUUID', joanUser.uuid);
+    successUrl.searchParams.set('pubKey', joanUser.pubKey);
+    if (joanUser.privateKey) {
+      successUrl.searchParams.set('privateKey', joanUser.privateKey);
+    }
+    successUrl.searchParams.set('githubUsername', githubUser.githubUsername);
+    successUrl.searchParams.set('githubId', githubUser.githubId);
+    successUrl.searchParams.set('githubAvatar', githubUser.githubAvatarUrl || '');
+
+    res.redirect(successUrl.toString());
+  } catch (error) {
+    console.error('GitHub OAuth callback error:', error);
+    res.redirect('/?error=oauth_failed');
+  }
+});
+
+// ========================================
+// Existing Joan Endpoints
+// ========================================
 
 app.put('/user/create', async (req, res) => {
 console.log('got create user req');
@@ -199,6 +370,10 @@ console.warn(err);
   }
 });
 
-app.listen(3004);
+if (import.meta.url === `file://${process.argv[1]}`) {
+  app.listen(3004);
 
-console.log('server listening for credentials on port 3004');
+  console.log('server listening for credentials on port 3004');
+}
+
+export default app;
